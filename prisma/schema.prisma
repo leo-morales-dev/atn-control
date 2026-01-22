@@ -1,0 +1,101 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL") // <--- Esta línea TIENE que estar aquí ahora
+}
+
+// --------------------------------------------------------
+// MODELOS PRINCIPALES
+// --------------------------------------------------------
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String   // Recuerda hashear esto (bcrypt) antes de guardar
+  name      String
+  role      String   @default("admin") // Útil para el futuro
+  createdAt DateTime @default(now())
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // El código QR largo (Ej: ABR-1000001)
+  shortCode   String?  // La clave corta/ubicación (Ej: FLAP2610)
+  description String
+  stock       Int      @default(0)
+  category    String   @default("consumible") // "consumible" | "herramienta"
+  
+  // Relaciones
+  loans      Loan[]
+  damageLogs DamageLog[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Employee {
+  id             Int     @id @default(autoincrement())
+  name           String
+  employeeNumber String? // Número de nómina o ID interno
+
+  // Relaciones
+  loans Loan[]
+}
+
+// --------------------------------------------------------
+// MODELOS TRANSACCIONALES (Historial y Movimientos)
+// --------------------------------------------------------
+
+model Loan {
+  id         Int       @id @default(autoincrement())
+  quantity   Int       @default(1)
+  status     String    @default("prestado") // 'prestado', 'devuelto', 'consumido'
+  dateOut    DateTime  @default(now())
+  dateReturn DateTime?
+
+  // Relaciones (Foreign Keys)
+  // Esto conecta el préstamo directamente con el Producto y el Empleado real
+  productId  Int
+  product    Product   @relation(fields: [productId], references: [id])
+  
+  employeeId Int?
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+
+  // --- SNAPSHOTS / RESPALDOS ---
+  // Guardamos el texto por si se borra el producto/empleado original
+  backupProduct  String?
+  backupCode     String?
+  backupEmployee String?
+}
+
+model InventoryLog {
+  id          Int      @id @default(autoincrement())
+  action      String   // 'ALTA', 'ACTUALIZACION', 'XML', etc.
+  description String?
+  user        String   @default("Sistema") // Quién hizo el cambio
+  date        DateTime @default(now())
+
+  // Datos informativos (no requieren relación estricta para no romper el log si se borra el item)
+  backupProduct String?
+  backupCode    String?
+}
+
+model DamageLog {
+  id           Int      @id @default(autoincrement())
+  quantity     Int
+  reason       String
+  specificCode String?  // Si fue una pieza específica con serie
+  date         DateTime @default(now())
+
+  // Relación opcional con producto para estadísticas
+  productId    Int?
+  product      Product? @relation(fields: [productId], references: [id])
+
+  backupProduct String?
+  backupCode    String?
+}
