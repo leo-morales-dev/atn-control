@@ -1,6 +1,7 @@
-import { getProducts } from "@/app/actions/products"
+import { getProducts } from "@/app/actions/product"
 import { AddProductDialog } from "@/components/AddProductDialog"
 import { Product } from "@prisma/client" // <--- ¡Importante!
+import { EditProductDialog } from "@/components/EditProductDialog"
 import { Printer } from "lucide-react"
 import Link from "next/link"
 import {
@@ -72,8 +73,8 @@ export default async function Home() {
                         {product.stock}
                        </span>
                     </TableCell>
-                    <TableCell className="text-right flex justify-end gap-2">
-                      {/* Botón Imprimir Etiqueta */}
+                    <TableCell className="text-right flex justify-end gap-1">
+                      {/* Botón Imprimir (Ya lo tenías) */}
                       <Link 
                         href={`/print/product/${product.id}`} 
                         target="_blank"
@@ -83,9 +84,9 @@ export default async function Home() {
                         <Printer size={16} />
                       </Link>
 
-                      <button className="text-sm text-zinc-500 hover:text-zinc-900 underline p-2">
-                        Editar
-                      </button>
+                      {/* NUEVO: Botón Editar */}
+                      <EditProductDialog product={product} />
+
                     </TableCell>
                   </TableRow>
                 ))

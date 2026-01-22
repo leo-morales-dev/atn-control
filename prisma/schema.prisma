@@ -32,6 +32,7 @@ model Product {
   
   // Relaciones
   loans      Loan[]
+  incidents   Incident[]
   damageLogs DamageLog[]
 
   createdAt   DateTime @default(now())
@@ -45,6 +46,7 @@ model Employee {
 
   // Relaciones
   loans Loan[]
+  incidents      Incident[]
 }
 
 // --------------------------------------------------------
@@ -98,4 +100,15 @@ model DamageLog {
 
   backupProduct String?
   backupCode    String?
+}
+
+model Incident {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+  employeeId  Int?     // Opcional, porque a veces se daña en almacén sin culpable
+  employee    Employee? @relation(fields: [employeeId], references: [id])
+  description String   // Qué pasó (ej: "Se cayó del andamio")
+  date        DateTime @default(now())
+  status      String   // "reparacion", "baja", "perdida"
 }

@@ -1,9 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
 import { usePathname } from "next/navigation"
+import { useState, useEffect } from "react" // <--- Importante: useEffect agregado aquí
 import { 
   LayoutDashboard, 
   Package, 
@@ -11,9 +10,9 @@ import {
   ArrowRightLeft, 
   History, 
   AlertTriangle,
-  LogOut // <--- Importamos icono de salida
+  LogOut 
 } from "lucide-react"
-import { logout } from "@/app/actions/auth" // <--- Importamos la acción de salir
+import { logout } from "@/app/actions/auth"
 
 const menuItems = [
   // Ahora el Dashboard es la raíz "/"
@@ -28,8 +27,15 @@ const menuItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const [isLoggingOut, setIsLoggingOut] = useState(false) // <--- Estado para controlar salida
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
+  // --- CORRECCIÓN VITAL ---
+  // Si la ruta cambia (ej. entramos al Dashboard), quitamos la pantalla blanca.
+  useEffect(() => {
+    setIsLoggingOut(false)
+  }, [pathname])
+
+  // Ocultar Sidebar en Login o Impresión
   if (pathname === "/login" || pathname.startsWith("/print")) {
     return null
   }
@@ -37,13 +43,14 @@ export function Sidebar() {
   // --- FUNCIÓN DE LIMPIEZA VISUAL ---
   const handleLogout = async () => {
     setIsLoggingOut(true) // Activa el estado de salida
-    // Pequeño delay para que React renderice la pantalla blanca antes de procesar el logout
+    
+    // Pequeño delay para asegurar que se renderice la pantalla blanca antes de procesar el logout
     setTimeout(async () => {
         await logout()
     }, 100)
   }
 
-  // Si se está saliendo, retornamos NADA (o un div blanco que cubra todo)
+  // Si se está saliendo, mostramos la pantalla blanca de transición
   if (isLoggingOut) {
     return (
         <div className="fixed inset-0 z-[9999] bg-white flex items-center justify-center">

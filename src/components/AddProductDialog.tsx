@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { createProduct } from "@/app/actions/products" // Importamos la acción del servidor
+import { createProduct } from "@/app/actions/product" // Importamos la acción del servidor
 
 export function AddProductDialog() {
   const [open, setOpen] = useState(false)
