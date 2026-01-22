@@ -28,6 +28,7 @@ model Product {
   shortCode   String?  // La clave corta/ubicación (Ej: FLAP2610)
   description String
   stock       Int      @default(0)
+  minStock    Int      @default(5)
   category    String   @default("consumible") // "consumible" | "herramienta"
   
   // Relaciones

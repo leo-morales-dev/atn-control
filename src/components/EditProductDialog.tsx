@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { updateProduct } from "@/app/actions/product"
+import { updateProduct } from "../app/actions/product"
 
 // Definimos qué datos necesita este componente para funcionar
 interface Props {
@@ -21,6 +21,7 @@ interface Props {
     description: string
     category: string
     stock: number
+    minStock: number
   }
 }
 
@@ -83,6 +84,12 @@ export function EditProductDialog({ product }: Props) {
                 <label className="text-sm font-medium">Stock Actual</label>
                 <Input name="stock" type="number" defaultValue={product.stock} required />
             </div>
+
+                {/* NUEVO CAMPO */}
+                <div className="grid gap-2">
+                    <label className="text-sm font-medium text-red-600">Alerta Mínima</label>
+                    <Input name="minStock" type="number" defaultValue={product.minStock} required className="bg-red-50 border-red-100" />
+                </div>
           </div>
 
           <Button type="submit" disabled={loading} className="w-full bg-zinc-900 text-white">
