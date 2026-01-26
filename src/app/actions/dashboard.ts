@@ -1,4 +1,4 @@
-'use server'
+"use server"
 
 import prisma from "@/lib/prisma"
 
@@ -8,7 +8,6 @@ export async function getDashboardStats() {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
   try {
-    // Ejecutamos varias consultas en paralelo para que sea veloz
     const [
       totalProducts,
       lowStockProducts,
@@ -16,20 +15,25 @@ export async function getDashboardStats() {
       recentActivity,
       lastWeekLoans
     ] = await Promise.all([
-      // A. Contar productos totales
-      prisma.product.count(),
-      
-      // B. Contar productos con stock crítico (< 5)
+      // A. Contar productos activos (no archivados)
       prisma.product.count({
-        where: { stock: { lte: 5 } }
+        where: { isArchived: false }
+      }),
+      
+      // B. Contar productos con stock crítico (< 5) y activos
+      prisma.product.count({
+        where: { 
+          isArchived: false,
+          stock: { lte: 5 } 
+        }
       }),
 
-      // C. Contar préstamos activos
+      // C. Contar préstamos activos (Pendientes de devolución)
       prisma.loan.count({
-        where: { status: "prestado" }
+        where: { dateReturn: null }
       }),
 
-      // D. Traer los 5 últimos movimientos
+      // D. Traer los 5 últimos movimientos (SIN cambiar nombres de variables)
       prisma.loan.findMany({
         take: 5,
         orderBy: { dateOut: 'desc' },
@@ -39,7 +43,7 @@ export async function getDashboardStats() {
         }
       }),
 
-      // E. Datos para la gráfica (Préstamos de la última semana)
+      // E. Datos para la gráfica
       prisma.loan.groupBy({
         by: ['dateOut'],
         where: {
@@ -57,8 +61,7 @@ export async function getDashboardStats() {
         totalProducts,
         lowStockProducts,
         activeLoansCount,
-        recentActivity,
-        // Procesamos los datos de la gráfica aquí mismo para simplificar el frontend
+        recentActivity, // Ahora se envía tal cual, con 'employee' y 'dateOut'
         chartData: processChartData(lastWeekLoans) 
       }
     }
@@ -68,19 +71,17 @@ export async function getDashboardStats() {
   }
 }
 
-// Función auxiliar para formatear datos de la gráfica
+// Función auxiliar para la gráfica
 function processChartData(groupedData: any[]) {
-  // Crear array de los últimos 7 días con contador en 0
   const days = []
   for (let i = 6; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
-    const dateStr = d.toISOString().split('T')[0] // "2023-10-25"
+    // Ajuste simple de fecha para coincidir con el string de la BD
+    const dateStr = d.toISOString().split('T')[0] 
     
-    // Buscar si hubo préstamos ese día
-    // Nota: En SQLite las fechas se guardan como string a veces, o timestamps.
-    // Esta lógica es simple; en producción real se ajusta según la zona horaria.
     const found = groupedData.find(item => {
+        // Aseguramos que item.dateOut sea tratado como fecha
         const itemDate = new Date(item.dateOut).toISOString().split('T')[0]
         return itemDate === dateStr
     })
