@@ -9,7 +9,7 @@ import { Toaster } from "sonner"; // <--- Importar
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Sistema Inventario QR",
+  title: "ATN Control",
   description: "Control de herramientas y consumibles",
 };
 

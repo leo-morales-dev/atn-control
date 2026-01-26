@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image" // <--- IMPORTANTE: Importar Image
 import { usePathname } from "next/navigation"
-import { useState, useEffect } from "react" // <--- Importante: useEffect agregado aquí
+import { useState, useEffect } from "react"
 import { 
   LayoutDashboard, 
   Package, 
@@ -15,9 +16,7 @@ import {
 import { logout } from "@/app/actions/auth"
 
 const menuItems = [
-  // Ahora el Dashboard es la raíz "/"
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  // El inventario tiene su ruta propia
   { name: "Inventario", href: "/inventory", icon: Package },
   { name: "Empleados", href: "/employees", icon: Users },
   { name: "Préstamos", href: "/loans", icon: ArrowRightLeft },
@@ -29,28 +28,21 @@ export function Sidebar() {
   const pathname = usePathname()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  // --- CORRECCIÓN VITAL ---
-  // Si la ruta cambia (ej. entramos al Dashboard), quitamos la pantalla blanca.
   useEffect(() => {
     setIsLoggingOut(false)
   }, [pathname])
 
-  // Ocultar Sidebar en Login o Impresión
   if (pathname === "/login" || pathname.startsWith("/print")) {
     return null
   }
 
-  // --- FUNCIÓN DE LIMPIEZA VISUAL ---
   const handleLogout = async () => {
-    setIsLoggingOut(true) // Activa el estado de salida
-    
-    // Pequeño delay para asegurar que se renderice la pantalla blanca antes de procesar el logout
+    setIsLoggingOut(true)
     setTimeout(async () => {
         await logout()
     }, 100)
   }
 
-  // Si se está saliendo, mostramos la pantalla blanca de transición
   if (isLoggingOut) {
     return (
         <div className="fixed inset-0 z-[9999] bg-white flex items-center justify-center">
@@ -61,13 +53,21 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-zinc-200 bg-white text-zinc-900 flex flex-col">
+      {/* SECCIÓN DEL LOGO */}
       <div className="flex h-16 items-center border-b border-zinc-200 px-6 shrink-0">
-        <div className="flex items-center gap-2 font-bold text-xl">
-          <div className="h-8 w-8 rounded-lg bg-zinc-900 flex items-center justify-center text-white">
-            QR
-          </div>
-          <span>Control</span>
+        
+        {/* REEMPLAZAMOS EL TEXTO POR LA IMAGEN */}
+        <div className="relative h-10 w-full flex items-center justify-start">
+             <Image 
+                src="/logo1.png" // Asegúrate que tu archivo esté en 'public/logo.png'
+                alt="ATN Control"
+                width={150} // Ajusta este ancho según tu logo
+                height={40} // Ajusta esta altura según tu logo
+                className="object-contain object-left" // Esto asegura que no se deforme
+                priority // Para que cargue rápido
+             />
         </div>
+
       </div>
 
       <nav className="flex-1 flex flex-col gap-1 p-4 overflow-y-auto">
@@ -81,7 +81,7 @@ export function Sidebar() {
               href={item.href}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 isActive 
-                  ? "bg-zinc-900 text-white" 
+                  ? "bg-[#de2d2d] text-white shadow-sm" 
                   : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
               }`}
             >
@@ -92,7 +92,6 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer del Sidebar con Botón de Cerrar Sesión */}
       <div className="p-4 border-t border-zinc-200 bg-zinc-50/50">
         <div className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 border border-zinc-100 shadow-sm">
             <div className="flex items-center gap-3">
@@ -107,7 +106,7 @@ export function Sidebar() {
             
             <button 
                 onClick={handleLogout}
-                className="text-zinc-400 hover:text-red-600 transition-colors p-1"
+                className="text-zinc-400 hover:text-[#de2d2d] transition-colors p-1"
                 title="Cerrar Sesión"
                 disabled={isLoggingOut}
             >

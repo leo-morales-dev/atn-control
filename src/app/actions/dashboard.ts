@@ -28,12 +28,13 @@ export async function getDashboardStats() {
         }
       }),
 
-      // C. Contar préstamos activos (Pendientes de devolución)
+      // C. Contar préstamos activos (CORRECCIÓN: Usamos 'status' en lugar de fecha)
+      // Esto filtra los consumibles (que son 'consumido') y los ya devueltos.
       prisma.loan.count({
-        where: { dateReturn: null }
+        where: { status: "prestado" } 
       }),
 
-      // D. Traer los 5 últimos movimientos (SIN cambiar nombres de variables)
+      // D. Traer los 5 últimos movimientos
       prisma.loan.findMany({
         take: 5,
         orderBy: { dateOut: 'desc' },
@@ -61,7 +62,7 @@ export async function getDashboardStats() {
         totalProducts,
         lowStockProducts,
         activeLoansCount,
-        recentActivity, // Ahora se envía tal cual, con 'employee' y 'dateOut'
+        recentActivity,
         chartData: processChartData(lastWeekLoans) 
       }
     }
@@ -77,17 +78,15 @@ function processChartData(groupedData: any[]) {
   for (let i = 6; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
-    // Ajuste simple de fecha para coincidir con el string de la BD
     const dateStr = d.toISOString().split('T')[0] 
     
     const found = groupedData.find(item => {
-        // Aseguramos que item.dateOut sea tratado como fecha
         const itemDate = new Date(item.dateOut).toISOString().split('T')[0]
         return itemDate === dateStr
     })
 
     days.push({
-      name: d.toLocaleDateString('es-MX', { weekday: 'short' }), // "Lun", "Mar"
+      name: d.toLocaleDateString('es-MX', { weekday: 'short' }),
       loans: found ? found._count.id : 0
     })
   }
