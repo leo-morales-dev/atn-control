@@ -3,11 +3,11 @@
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 
-// --- 1. NUEVO: Obtener estadísticas para las Cards ---
+// 1. Obtener estadísticas (Ignorando archivados)
 export async function getInventoryStats() {
   try {
-    // Traemos solo los datos necesarios para calcular rápido
     const products = await prisma.product.findMany({
+      where: { isArchived: false }, // <--- Solo activos
       select: {
         category: true,
         stock: true,
@@ -29,28 +29,26 @@ export async function getInventoryStats() {
   }
 }
 
-// --- 2. ACTUALIZADO: Obtener productos con Filtros ---
+// 2. Obtener productos (Filtrando archivados)
 export async function getProducts(query: string = "", filter: string = "all") {
   try {
     const where: any = {
+        isArchived: false, // <--- IMPORTANTE: Nunca mostrar los borrados
         OR: [
           { description: { contains: query } },
           { code: { contains: query } }
         ]
     }
 
-    // Filtro por Categoría
     if (filter === 'Herramienta' || filter === 'Consumible' || filter === 'EPP') {
         where.category = filter
     }
 
-    // Buscamos en BD
     const products = await prisma.product.findMany({
       where,
       orderBy: { id: 'desc' }
     })
 
-    // Filtro Especial: Stock Bajo (Lo hacemos aquí porque requiere comparar dos columnas)
     let finalProducts = products
     if (filter === 'low_stock') {
         finalProducts = products.filter(p => p.stock <= p.minStock)
@@ -62,60 +60,175 @@ export async function getProducts(query: string = "", filter: string = "all") {
   }
 }
 
-// --- Las funciones de Crear y Actualizar se mantienen igual ---
-
-export async function updateProduct(id: number, formData: FormData) {
-  const code = formData.get("code") as string
-  const description = formData.get("description") as string
-  const category = formData.get("category") as string
-  const stockRaw = formData.get("stock") as string
-  const minStockRaw = formData.get("minStock") as string
-  
-  const stock = stockRaw ? parseInt(stockRaw) : 0
-  const minStock = minStockRaw ? parseInt(minStockRaw) : 5
-
-  if (!code || !description || !category) {
-    return { success: false, error: "Faltan datos obligatorios" }
-  }
-
+// 3. NUEVO: Borrado Lógico (Archivar)
+export async function deleteProducts(filter: string = "all") {
   try {
-    await prisma.product.update({
-      where: { id },
-      data: { code, description, category, stock, minStock }
+    let where: any = { isArchived: false } // Solo afectar a los que están vivos
+
+    // Definir a quién vamos a "borrar"
+    if (filter === 'Herramienta' || filter === 'Consumible' || filter === 'EPP') {
+      where.category = filter
+    } else if (filter === 'low_stock') {
+      const allProducts = await prisma.product.findMany({ where: { isArchived: false }})
+      const idsToDelete = allProducts
+        .filter(p => p.stock <= p.minStock)
+        .map(p => p.id)
+      where.id = { in: idsToDelete }
+    }
+
+    // EN LUGAR DE DELETE, HACEMOS UPDATE
+    await prisma.product.updateMany({
+      where,
+      data: {
+        isArchived: true, // Lo marcamos como borrado
+        stock: 0          // Ponemos stock en 0 para que no cuente
+      }
     })
-    
+
+    // NO borramos préstamos ni incidentes. El historial queda a salvo.
+
     revalidatePath("/inventory")
-    revalidatePath("/") 
+    revalidatePath("/")
     return { success: true }
   } catch (error) {
-    return { success: false, error: "Error al actualizar." }
+    console.error(error)
+    return { success: false, error: "Error al eliminar productos." }
   }
 }
 
-export async function createProduct(formData: FormData) {
-  const code = formData.get("code") as string
-  const description = formData.get("description") as string
-  const category = formData.get("category") as string
-  const stockRaw = formData.get("stock") as string
-  const minStockRaw = formData.get("minStock") as string
-  
-  const stock = stockRaw ? parseInt(stockRaw) : 0
-  const minStock = minStockRaw ? parseInt(minStockRaw) : 5
+// ... Las funciones createProduct y updateProduct se quedan igual ...
+// (Asegúrate de dejarlas en el archivo como estaban)
+// Solo recuerda que al Crear, no necesitamos tocar isArchived (por defecto es false)
 
+export async function updateProduct(id: number, formData: FormData) {
+    const code = formData.get("code") as string
+    const description = formData.get("description") as string
+    const category = formData.get("category") as string
+    const stockRaw = formData.get("stock") as string
+    const minStockRaw = formData.get("minStock") as string
+    
+    const stock = stockRaw ? parseInt(stockRaw) : 0
+    const minStock = minStockRaw ? parseInt(minStockRaw) : 5
+  
+    if (!code || !description || !category) {
+      return { success: false, error: "Faltan datos obligatorios" }
+    }
+  
+    try {
+      await prisma.product.update({
+        where: { id },
+        data: { code, description, category, stock, minStock }
+      })
+      
+      revalidatePath("/inventory")
+      revalidatePath("/") 
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: "Error al actualizar." }
+    }
+}
+  
+export async function createProduct(formData: FormData) {
+    const code = formData.get("code") as string
+    const description = formData.get("description") as string
+    const category = formData.get("category") as string
+    const stockRaw = formData.get("stock") as string
+    const minStockRaw = formData.get("minStock") as string
+    
+    const stock = stockRaw ? parseInt(stockRaw) : 0
+    const minStock = minStockRaw ? parseInt(minStockRaw) : 5
+  
+    try {
+      await prisma.product.create({
+        data: {
+          code,
+          description,
+          category,
+          stock,
+          minStock,
+          shortCode: code 
+        }
+      })
+      revalidatePath("/inventory")
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: "Error al crear producto" }
+    }
+}
+
+// NUEVA: Borrar un solo producto por ID (Borrado Lógico)
+export async function deleteProductById(id: number) {
   try {
-    await prisma.product.create({
-      data: {
-        code,
-        description,
-        category,
-        stock,
-        minStock,
-        shortCode: code 
+    await prisma.product.update({
+      where: { id },
+      data: { 
+        isArchived: true, // Lo ocultamos
+        stock: 0          // Stock a 0 para que no cuente en sumas
       }
     })
+    
     revalidatePath("/inventory")
     return { success: true }
   } catch (error) {
-    return { success: false, error: "Error al crear producto" }
+    console.error(error)
+    return { success: false, error: "Error al eliminar el producto." }
+  }
+}
+
+export async function createOrUpdateProduct(data: FormData) {
+  const mode = data.get("mode") as string // "create" o "link"
+  
+  // Datos comunes
+  const quantity = parseInt(data.get("quantity") as string) || 0
+  const providerKey = data.get("shortCode") as string || "" // La clave del proveedor
+
+  try {
+    if (mode === "link") {
+      // --- MODO VINCULAR (Sumar Stock) ---
+      const productId = parseInt(data.get("linkedProductId") as string)
+
+      const currentProd = await prisma.product.findUnique({ where: { id: productId } })
+      if (!currentProd) throw new Error("Producto no encontrado")
+
+      // Lógica de fusión de claves (Igual que el XML)
+      let updatedShortCode = currentProd.shortCode || ""
+      if (providerKey && !updatedShortCode.includes(providerKey)) {
+          updatedShortCode = updatedShortCode 
+            ? `${updatedShortCode} / ${providerKey}` 
+            : providerKey
+      }
+
+      await prisma.product.update({
+        where: { id: productId },
+        data: {
+          stock: { increment: quantity },
+          shortCode: updatedShortCode
+        }
+      })
+
+    } else {
+      // --- MODO CREAR NUEVO ---
+      const code = data.get("code") as string
+      const description = data.get("description") as string
+      const category = data.get("category") as string
+      const minStock = parseInt(data.get("minStock") as string) || 5
+
+      await prisma.product.create({
+        data: {
+          code,
+          description,
+          category,
+          stock: quantity,
+          minStock,
+          shortCode: providerKey // Aquí guardamos la clave inicial
+        }
+      })
+    }
+
+    revalidatePath("/inventory")
+    return { success: true }
+  } catch (error) {
+    console.error(error)
+    return { success: false, error: "Error al procesar el ingreso." }
   }
 }

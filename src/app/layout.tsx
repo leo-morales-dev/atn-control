@@ -4,6 +4,7 @@ import "./globals.css";
 import { Sidebar } from "@/components/Sidebar"; // <--- Importamos
 import { ContentWrapper } from "@/components/ContentWrapper"; // <--- Importalo
 import { SessionGuard } from "@/components/SessionGuard"; // <--- Importar
+import { Toaster } from "sonner"; // <--- Importar
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -27,6 +28,7 @@ export default function RootLayout({
           <Sidebar />
           <ContentWrapper>
             {children}
+            <Toaster />
           </ContentWrapper>
         </div>
       </body>

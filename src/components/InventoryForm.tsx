@@ -1,120 +1,210 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Plus, Wand2, Loader2, AlertTriangle } from "lucide-react" 
+import { Wand2, Loader2, AlertTriangle, Link as LinkIcon, FileUp, PackagePlus } from "lucide-react" 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { createProduct } from "@/app/actions/product"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { createOrUpdateProduct } from "@/app/actions/product"
+import { SearchableProductSelect } from "@/components/SearchableProductSelect"
+import { toast } from "sonner"
+import Link from "next/link"
 
-export function InventoryForm() {
+interface Product {
+  id: number
+  description: string
+  code: string
+}
+
+interface Props {
+    productsList?: Product[]
+}
+
+export function InventoryForm({ productsList = [] }: Props) {
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState("create") 
+  const [category, setCategory] = useState("Herramienta")
+  const [selectedProductId, setSelectedProductId] = useState("")
   const formRef = useRef<HTMLFormElement>(null)
 
   const generateCode = () => {
     const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase()
-    const codeInput = document.getElementById("code-input") as HTMLInputElement
-    if (codeInput) {
-      codeInput.value = `PROD-${randomPart}`
+    const form = formRef.current
+    if (form) {
+        const codeInput = form.querySelector('input[name="code"]') as HTMLInputElement
+        if (codeInput) codeInput.value = `PROD-${randomPart}`
     }
   }
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
-    const result = await createProduct(formData)
+    formData.append("mode", activeTab)
+    
+    if (activeTab === "link") {
+        if (!selectedProductId) {
+            toast.error("Selecciona un producto")
+            setLoading(false)
+            return
+        }
+        formData.append("linkedProductId", selectedProductId)
+    } else {
+        formData.append("category", category)
+    }
+
+    const result = await createOrUpdateProduct(formData)
     setLoading(false)
 
     if (result.success) {
+      toast.success(activeTab === "create" ? "Registrado" : "Stock actualizado")
       formRef.current?.reset()
+      setSelectedProductId("")
     } else {
-      alert("Error: " + result.error)
+      toast.error(result.error)
     }
   }
 
   return (
-    <Card className="mb-8 border-zinc-200 shadow-sm bg-white">
-      <CardHeader className="pb-3 border-b border-zinc-100">
-        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <Plus className="h-5 w-5 text-zinc-500" />
-          Nuevo Ingreso
-        </CardTitle>
+    <Card className="mb-6 border-zinc-200 shadow-sm bg-white overflow-hidden">
+      
+      <CardHeader className="py-2 px-4 border-b border-zinc-100 bg-zinc-50/50 flex flex-row items-center justify-between h-10">
+        <div className="flex items-center gap-2">
+            <PackagePlus className="text-blue-600" size={16} />
+            <span className="font-bold text-sm text-zinc-800">Nuevo Ingreso</span>
+        </div>
+        
+        {/* CAMBIO AQUÍ: Botón sólido negro */}
+        <Link href="/inventory/import">
+            <Button 
+                size="sm" 
+                className="h-7 text-xs gap-2 bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm px-3"
+            >
+                <FileUp size={12} /> Importar XML
+            </Button>
+        </Link>
       </CardHeader>
       
-      <CardContent className="pt-6">
-        <form ref={formRef} action={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-          
-          {/* CÓDIGO */}
-          <div className="md:col-span-3 space-y-2">
-            <label className="text-sm font-medium text-zinc-700">Código / Serial</label>
-            <div className="flex gap-2">
-                <Input 
-                    id="code-input"
-                    name="code" 
-                    placeholder="Escanea o genera..." 
-                    required 
-                    className="font-mono bg-zinc-50"
-                />
-                <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="icon" 
-                    onClick={generateCode}
-                    title="Generar código automático"
-                    className="shrink-0 text-zinc-500 hover:text-zinc-900"
-                >
-                    <Wand2 size={16} />
-                </Button>
-            </div>
-          </div>
+      <CardContent className="px-4 pb-3 pt-3">
+        <form ref={formRef} action={handleSubmit}>
+            <Tabs defaultValue="create" value={activeTab} onValueChange={setActiveTab} className="w-full">
+                
+                {/* PESTAÑAS */}
+                <TabsList className="h-10 mb-3 bg-zinc-100/80 p-1 w-full sm:w-auto inline-flex justify-start">
+                    <TabsTrigger 
+                        value="create" 
+                        className="text-xs h-8 px-4 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                    >
+                        Crear Nuevo
+                    </TabsTrigger>
+                    <TabsTrigger 
+                        value="link" 
+                        className="text-xs h-8 px-4 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                    >
+                        Sumar a Existente
+                    </TabsTrigger>
+                </TabsList>
 
-          {/* DESCRIPCIÓN */}
-          <div className="md:col-span-3 space-y-2">
-            <label className="text-sm font-medium text-zinc-700">Descripción</label>
-            <Input name="description" placeholder="Ej: Taladro Percutor 1/2" required />
-          </div>
+                {/* --- MODO CREAR --- */}
+                <TabsContent value="create" className="mt-0">
+                    <div className="grid grid-cols-12 gap-2 items-end">
+                        
+                        {/* 1. Código */}
+                        <div className="col-span-12 md:col-span-3 space-y-0.5">
+                            <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Código / QR</Label>
+                            <div className="flex gap-1">
+                                <Input name="code" placeholder="Escanear..." required={activeTab === 'create'} className="h-8 text-xs bg-zinc-50" />
+                                <Button type="button" variant="outline" size="icon" onClick={generateCode} className="h-8 w-8 shrink-0 text-zinc-400">
+                                    <Wand2 size={12} />
+                                </Button>
+                            </div>
+                        </div>
 
-          {/* CATEGORÍA */}
-          <div className="md:col-span-2 space-y-2">
-            <label className="text-sm font-medium text-zinc-700">Categoría</label>
-            <select 
-                name="category" 
-                className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-zinc-900 focus:outline-none"
-            >
-                <option value="Herramienta">Herramienta</option>
-                <option value="Consumible">Consumible</option>
-                <option value="EPP">EPP</option>
-            </select>
-          </div>
+                        {/* 2. Descripción */}
+                        <div className="col-span-12 md:col-span-6 space-y-0.5">
+                            <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Descripción</Label>
+                            <Input name="description" placeholder="Ej: Taladro..." required={activeTab === 'create'} className="h-8 text-xs bg-zinc-50" />
+                        </div>
 
-           {/* STOCK INICIAL */}
-           <div className="md:col-span-1 space-y-2">
-            <label className="text-sm font-medium text-zinc-700">Cant.</label>
-            <Input name="stock" type="number" defaultValue="1" min="0" required className="text-center" />
-          </div>
+                        {/* 3. Categoría */}
+                        <div className="col-span-12 md:col-span-3 space-y-0.5">
+                            <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Categoría</Label>
+                            <Select value={category} onValueChange={setCategory}>
+                                <SelectTrigger className="h-8 text-xs bg-zinc-50"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Herramienta">Herramienta</SelectItem>
+                                    <SelectItem value="Consumible">Consumible</SelectItem>
+                                    <SelectItem value="EPP">EPP</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-          {/* STOCK MÍNIMO (ALERTA) */}
-          <div className="md:col-span-1 space-y-2">
-            <label className="text-sm font-medium text-red-600 flex items-center gap-1">
-                Min. <AlertTriangle size={12}/>
-            </label>
-            <Input 
-                name="minStock" 
-                type="number" 
-                defaultValue="5" 
-                min="0" 
-                required 
-                className="text-center border-red-100 bg-red-50/50 focus:border-red-300" 
-                title="Alerta cuando baje de esta cantidad"
-            />
-          </div>
+                        {/* FILA 2 */}
+                        
+                        {/* 4. Ref Prov */}
+                        <div className="col-span-12 md:col-span-3 space-y-0.5">
+                            <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Ref. Prov (Opcional)</Label>
+                            <Input name="shortCode" placeholder="Ej: FAC-123" className="h-8 text-xs bg-zinc-50" />
+                        </div>
 
-          {/* BOTÓN */}
-          <div className="md:col-span-2">
-            <Button type="submit" disabled={loading} className="w-full bg-zinc-900 hover:bg-zinc-800 text-white">
-                {loading ? <Loader2 className="animate-spin h-4 w-4" /> : "Registrar"}
-            </Button>
-          </div>
+                        {/* 5. Min Stock */}
+                        <div className="col-span-6 md:col-span-2 space-y-0.5">
+                            <Label className="text-[10px] font-semibold text-red-500 uppercase flex items-center gap-1">
+                                Min <AlertTriangle size={10}/>
+                            </Label>
+                            <Input name="minStock" type="number" defaultValue="5" className="h-8 text-xs text-center bg-red-50/50 border-red-100" />
+                        </div>
 
+                         {/* 6. Cantidad */}
+                         <div className="col-span-6 md:col-span-2 space-y-0.5">
+                            <Label className="text-[10px] font-bold text-zinc-800 uppercase">Cant.</Label>
+                            <Input name="quantity" type="number" defaultValue="1" min="1" required className="h-8 text-sm font-bold text-center" />
+                        </div>
+
+                        {/* 7. Botón */}
+                        <div className="col-span-12 md:col-span-5">
+                            <Button type="submit" disabled={loading} className="w-full h-8 bg-zinc-900 hover:bg-zinc-800 text-xs font-bold uppercase tracking-wide">
+                                {loading ? <Loader2 className="animate-spin h-3 w-3" /> : "Registrar"}
+                            </Button>
+                        </div>
+                    </div>
+                </TabsContent>
+
+                {/* --- MODO VINCULAR --- */}
+                <TabsContent value="link" className="mt-0">
+                    <div className="grid grid-cols-12 gap-2 items-end">
+                        
+                        {/* Buscador */}
+                        <div className="col-span-12 md:col-span-6 space-y-0.5">
+                            <Label className="text-[10px] font-bold text-blue-600 uppercase flex items-center gap-1">
+                                <LinkIcon size={12}/> Producto a Vincular
+                            </Label>
+                            <SearchableProductSelect products={productsList} value={selectedProductId} onChange={setSelectedProductId} />
+                        </div>
+
+                        {/* Ref Nueva */}
+                        <div className="col-span-12 md:col-span-3 space-y-0.5">
+                             <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Ref. Prov (Opcional)</Label>
+                             <Input name="shortCode" placeholder="Nueva clave..." className="h-8 text-xs bg-zinc-50" />
+                        </div>
+
+                        {/* Cantidad */}
+                        <div className="col-span-4 md:col-span-1 space-y-0.5">
+                            <Label className="text-[10px] font-bold text-zinc-800 uppercase">Cant.</Label>
+                            <Input name="quantity" type="number" defaultValue="1" min="1" required className="h-8 text-sm font-bold text-center" />
+                        </div>
+
+                        {/* Botón */}
+                        <div className="col-span-8 md:col-span-2">
+                             <Button type="submit" disabled={loading} className="w-full h-8 bg-zinc-900 hover:bg-zinc-800 text-xs font-bold uppercase">
+                                {loading ? "..." : "Sumar"}
+                            </Button>
+                        </div>
+                    </div>
+                </TabsContent>
+
+            </Tabs>
         </form>
       </CardContent>
     </Card>

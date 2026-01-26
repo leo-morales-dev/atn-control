@@ -29,6 +29,7 @@ model Product {
   description String
   stock       Int      @default(0)
   minStock    Int      @default(5)
+  isArchived  Boolean  @default(false)
   category    String   @default("consumible") // "consumible" | "herramienta"
   
   // Relaciones
