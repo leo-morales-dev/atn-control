@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image" // <--- IMPORTANTE: Importar Image
+import Image from "next/image" 
 import { usePathname } from "next/navigation"
 import { useState, useEffect } from "react"
 import { 
@@ -15,13 +15,14 @@ import {
 } from "lucide-react"
 import { logout } from "@/app/actions/auth"
 
+// --- CAMBIO DE ORDEN AQUÍ ---
 const menuItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Inventario", href: "/inventory", icon: Package },
-  { name: "Empleados", href: "/employees", icon: Users },
-  { name: "Préstamos", href: "/loans", icon: ArrowRightLeft },
-  { name: "Historial", href: "/history", icon: History },
-  { name: "Reportes", href: "/damages", icon: AlertTriangle },
+  { name: "Préstamos", href: "/loans", icon: ArrowRightLeft }, // Prioridad Alta: Operación diaria
+  { name: "Inventario", href: "/inventory", icon: Package },   // Prioridad Media: Gestión de stock
+  { name: "Reportes", href: "/damages", icon: AlertTriangle }, // Prioridad Media: Incidencias
+  { name: "Empleados", href: "/employees", icon: Users },      // Prioridad Baja: Administrativo
+  { name: "Historial", href: "/history", icon: History },      // Prioridad Baja: Consulta
 ]
 
 export function Sidebar() {
@@ -56,15 +57,14 @@ export function Sidebar() {
       {/* SECCIÓN DEL LOGO */}
       <div className="flex h-16 items-center border-b border-zinc-200 px-6 shrink-0">
         
-        {/* REEMPLAZAMOS EL TEXTO POR LA IMAGEN */}
         <div className="relative h-10 w-full flex items-center justify-start">
              <Image 
-                src="/logo1.png" // Asegúrate que tu archivo esté en 'public/logo.png'
+                src="/logo1.png" 
                 alt="ATN Control"
-                width={150} // Ajusta este ancho según tu logo
-                height={40} // Ajusta esta altura según tu logo
-                className="object-contain object-left" // Esto asegura que no se deforme
-                priority // Para que cargue rápido
+                width={150} 
+                height={40} 
+                className="object-contain object-left" 
+                priority 
              />
         </div>
 
