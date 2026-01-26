@@ -23,6 +23,7 @@ interface Props {
     productsList?: Product[]
 }
 
+// IMPORTANTE: El nombre de la función debe ser InventoryForm
 export function InventoryForm({ productsList = [] }: Props) {
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("create") 
@@ -75,7 +76,6 @@ export function InventoryForm({ productsList = [] }: Props) {
             <span className="font-bold text-sm text-zinc-800">Nuevo Ingreso</span>
         </div>
         
-        {/* CAMBIO AQUÍ: Botón sólido negro */}
         <Link href="/inventory/import">
             <Button 
                 size="sm" 
@@ -90,7 +90,6 @@ export function InventoryForm({ productsList = [] }: Props) {
         <form ref={formRef} action={handleSubmit}>
             <Tabs defaultValue="create" value={activeTab} onValueChange={setActiveTab} className="w-full">
                 
-                {/* PESTAÑAS */}
                 <TabsList className="h-10 mb-3 bg-zinc-100/80 p-1 w-full sm:w-auto inline-flex justify-start">
                     <TabsTrigger 
                         value="create" 
@@ -109,8 +108,6 @@ export function InventoryForm({ productsList = [] }: Props) {
                 {/* --- MODO CREAR --- */}
                 <TabsContent value="create" className="mt-0">
                     <div className="grid grid-cols-12 gap-2 items-end">
-                        
-                        {/* 1. Código */}
                         <div className="col-span-12 md:col-span-3 space-y-0.5">
                             <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Código / QR</Label>
                             <div className="flex gap-1">
@@ -121,13 +118,11 @@ export function InventoryForm({ productsList = [] }: Props) {
                             </div>
                         </div>
 
-                        {/* 2. Descripción */}
                         <div className="col-span-12 md:col-span-6 space-y-0.5">
                             <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Descripción</Label>
                             <Input name="description" placeholder="Ej: Taladro..." required={activeTab === 'create'} className="h-8 text-xs bg-zinc-50" />
                         </div>
 
-                        {/* 3. Categoría */}
                         <div className="col-span-12 md:col-span-3 space-y-0.5">
                             <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Categoría</Label>
                             <Select value={category} onValueChange={setCategory}>
@@ -140,15 +135,11 @@ export function InventoryForm({ productsList = [] }: Props) {
                             </Select>
                         </div>
 
-                        {/* FILA 2 */}
-                        
-                        {/* 4. Ref Prov */}
                         <div className="col-span-12 md:col-span-3 space-y-0.5">
                             <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Ref. Prov (Opcional)</Label>
                             <Input name="shortCode" placeholder="Ej: FAC-123" className="h-8 text-xs bg-zinc-50" />
                         </div>
 
-                        {/* 5. Min Stock */}
                         <div className="col-span-6 md:col-span-2 space-y-0.5">
                             <Label className="text-[10px] font-semibold text-red-500 uppercase flex items-center gap-1">
                                 Min <AlertTriangle size={10}/>
@@ -156,13 +147,11 @@ export function InventoryForm({ productsList = [] }: Props) {
                             <Input name="minStock" type="number" defaultValue="5" className="h-8 text-xs text-center bg-red-50/50 border-red-100" />
                         </div>
 
-                         {/* 6. Cantidad */}
                          <div className="col-span-6 md:col-span-2 space-y-0.5">
                             <Label className="text-[10px] font-bold text-zinc-800 uppercase">Cant.</Label>
                             <Input name="quantity" type="number" defaultValue="1" min="1" required className="h-8 text-sm font-bold text-center" />
                         </div>
 
-                        {/* 7. Botón */}
                         <div className="col-span-12 md:col-span-5">
                             <Button type="submit" disabled={loading} className="w-full h-8 bg-zinc-900 hover:bg-zinc-800 text-xs font-bold uppercase tracking-wide">
                                 {loading ? <Loader2 className="animate-spin h-3 w-3" /> : "Registrar"}
@@ -174,8 +163,6 @@ export function InventoryForm({ productsList = [] }: Props) {
                 {/* --- MODO VINCULAR --- */}
                 <TabsContent value="link" className="mt-0">
                     <div className="grid grid-cols-12 gap-2 items-end">
-                        
-                        {/* Buscador */}
                         <div className="col-span-12 md:col-span-6 space-y-0.5">
                             <Label className="text-[10px] font-bold text-blue-600 uppercase flex items-center gap-1">
                                 <LinkIcon size={12}/> Producto a Vincular
@@ -183,19 +170,16 @@ export function InventoryForm({ productsList = [] }: Props) {
                             <SearchableProductSelect products={productsList} value={selectedProductId} onChange={setSelectedProductId} />
                         </div>
 
-                        {/* Ref Nueva */}
                         <div className="col-span-12 md:col-span-3 space-y-0.5">
                              <Label className="text-[10px] font-semibold text-zinc-500 uppercase">Ref. Prov (Opcional)</Label>
                              <Input name="shortCode" placeholder="Nueva clave..." className="h-8 text-xs bg-zinc-50" />
                         </div>
 
-                        {/* Cantidad */}
                         <div className="col-span-4 md:col-span-1 space-y-0.5">
                             <Label className="text-[10px] font-bold text-zinc-800 uppercase">Cant.</Label>
                             <Input name="quantity" type="number" defaultValue="1" min="1" required className="h-8 text-sm font-bold text-center" />
                         </div>
 
-                        {/* Botón */}
                         <div className="col-span-8 md:col-span-2">
                              <Button type="submit" disabled={loading} className="w-full h-8 bg-zinc-900 hover:bg-zinc-800 text-xs font-bold uppercase">
                                 {loading ? "..." : "Sumar"}
