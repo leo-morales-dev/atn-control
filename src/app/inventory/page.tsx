@@ -1,16 +1,9 @@
-import { getProducts, getInventoryStats } from "@/app/actions/product" // <--- Nueva función importada
+import { getProducts, getInventoryStats } from "@/app/actions/product"
 import { InventoryForm } from "@/components/InventoryForm"
-import { InventoryStats } from "@/components/InventoryStats" // <--- Componente nuevo
-import { Product } from "@prisma/client"
-import { EditProductDialog } from "@/components/EditProductDialog"
-import { Search } from "@/components/Search"
-import { Printer, AlertTriangle } from "lucide-react" 
-import Link from "next/link"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { BulkDeleteButton } from "@/components/BulkDeleteButton"
-import { ProviderKeyDisplay } from "@/components/ProviderKeyDisplay"
+import { InventoryStats } from "@/components/InventoryStats"
 import { InventoryManager } from "@/components/InventoryManager"
+import { Search } from "@/components/Search"
+import { BulkDeleteButton } from "@/components/BulkDeleteButton"
 
 export const dynamic = 'force-dynamic'
 
@@ -23,14 +16,24 @@ export default async function Home({
   const query = params?.query || ""
   const filter = params?.filter || "all"
 
-  // Ejecutamos las dos consultas en paralelo para que sea súper rápido
-  const [productsData, statsData] = await Promise.all([
+  // Ejecutamos 3 consultas en paralelo:
+  // 1. Productos de la tabla (con filtros del usuario)
+  // 2. Estadísticas para las tarjetas de arriba
+  // 3. Alerta Global de Stock Bajo (para que avise siempre, sin importar el filtro)
+  const [productsData, statsData, globalLowStockData] = await Promise.all([
     getProducts(query, filter),
-    getInventoryStats()
+    getInventoryStats(),
+    getProducts("", "low_stock") // <--- Esto alimenta la alerta global
   ])
 
-  const products = productsData.data
-  const stats = statsData.data || { total: 0, tools: 0, consumables: 0, lowStock: 0 }
+  const products = productsData.data || []
+  
+  // CORRECCIÓN DEL ERROR AQUÍ:
+  // Usamos '??' para garantizar que si data viene undefined, use el objeto por defecto.
+  // Esto calma a TypeScript.
+  const stats = statsData.data ?? { total: 0, tools: 0, consumables: 0, lowStock: 0 }
+  
+  const globalLowStock = globalLowStockData.data || []
 
   return (
     <main className="min-h-screen bg-gray-50/50 p-8">
@@ -41,20 +44,25 @@ export default async function Home({
             <p className="text-zinc-500 mt-1">Alta y gestión de activos del almacén.</p>
         </div>
 
-        {/* 1. LAS CARDS DE FILTRADO */}
+        {/* 1. ESTADÍSTICAS (Ya no dará error) */}
         <InventoryStats stats={stats} />
 
-        {/* 2. EL FORMULARIO DE REGISTRO */}
+        {/* 2. FORMULARIO */}
         <InventoryForm productsList={products} />
 
-        {/* Buscador */}
+        {/* BUSCADOR Y BORRADO MASIVO */}
         <div className="flex flex-col md:flex-row justify-end items-center gap-3 mb-4">
               <BulkDeleteButton />
               <div className="w-full md:w-72">
                 <Search placeholder="Buscar herramienta o código..." />
             </div>
         </div>
-          <InventoryManager products={products || []} />
+          
+        {/* 3. TABLA Y GESTOR (Con alerta global restaurada) */}
+        <InventoryManager 
+            products={products} 
+            initialLowStock={globalLowStock} // <--- Pasamos la lista de vigilancia
+        />
       </div>
     </main>
   )

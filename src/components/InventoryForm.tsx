@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createOrUpdateProduct } from "@/app/actions/product"
 import { SearchableProductSelect } from "@/components/SearchableProductSelect"
 import { toast } from "sonner"
+import { ExcelImport } from "@/components/ExcelImport"
 import Link from "next/link"
 
 interface Product {
@@ -23,7 +24,6 @@ interface Props {
     productsList?: Product[]
 }
 
-// IMPORTANTE: El nombre de la función debe ser InventoryForm
 export function InventoryForm({ productsList = [] }: Props) {
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("create") 
@@ -71,19 +71,24 @@ export function InventoryForm({ productsList = [] }: Props) {
     <Card className="mb-6 border-zinc-200 shadow-sm bg-white overflow-hidden">
       
       <CardHeader className="py-2 px-4 border-b border-zinc-100 bg-zinc-50/50 flex flex-row items-center justify-between h-10">
+        {/* TÍTULO A LA IZQUIERDA */}
         <div className="flex items-center gap-2">
             <PackagePlus className="text-blue-600" size={16} />
             <span className="font-bold text-sm text-zinc-800">Nuevo Ingreso</span>
         </div>
         
-        <Link href="/inventory/import">
-            <Button 
-                size="sm" 
-                className="h-7 text-xs gap-2 bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm px-3"
-            >
-                <FileUp size={12} /> Importar XML
-            </Button>
-        </Link>
+        {/* GRUPO DE BOTONES A LA DERECHA (JUNTOS) */}
+        <div className="flex items-center gap-2">
+            <ExcelImport />
+            <Link href="/inventory/import">
+                <Button 
+                    size="sm" 
+                    className="h-7 text-xs gap-2 bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm px-3"
+                >
+                    <FileUp size={12} /> Importar XML
+                </Button>
+            </Link>
+        </div>
       </CardHeader>
       
       <CardContent className="px-4 pb-3 pt-3">

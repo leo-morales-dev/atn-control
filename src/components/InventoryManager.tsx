@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation" // <--- Importamos Router
 import { Product } from "@prisma/client"
-// AGREGAMOS: Bell, BellOff, RotateCcw
 import { Printer, AlertTriangle, CheckSquare, Square, Filter, XCircle, Bell, BellOff, RotateCcw } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -12,7 +12,6 @@ import { EditProductDialog } from "@/components/EditProductDialog"
 import { ProviderKeyDisplay } from "@/components/ProviderKeyDisplay"
 import { DeleteProductButton } from "@/components/DeleteProductButton"
 import { LowStockAlert } from "@/components/LowStockAlert"
-// AGREGAMOS: Componentes de Popover
 import {
   Popover,
   PopoverContent,
@@ -21,22 +20,24 @@ import {
 
 interface Props {
   products: Product[]
+  initialLowStock?: Product[] // <--- Nueva prop opcional
 }
 
-export function InventoryManager({ products }: Props) {
+export function InventoryManager({ products, initialLowStock = [] }: Props) {
+  const router = useRouter() // <--- Hook de navegación
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [filterMode, setFilterMode] = useState<'all' | 'low'>('all')
-  
-  // ESTADO NUEVO: Para controlar si la alerta está dormida
   const [alertSnoozedUntil, setAlertSnoozedUntil] = useState<number | null>(null)
 
-  // 1. Verificar al cargar si hay una alerta pospuesta
+  // Decidimos qué lista vigila la alerta:
+  // Si nos pasaron 'initialLowStock' (Global), usamos esa. Si no, usamos 'products' (Local).
+  const alertProducts = initialLowStock.length > 0 ? initialLowStock : products
+
   useEffect(() => {
      checkSnoozeStatus()
   }, [])
 
   const checkSnoozeStatus = () => {
-      // Leemos del localStorage
       const snooze = localStorage.getItem("inventory_alert_snooze")
       if (snooze && parseInt(snooze) > new Date().getTime()) {
           setAlertSnoozedUntil(parseInt(snooze))
@@ -45,11 +46,9 @@ export function InventoryManager({ products }: Props) {
       }
   }
 
-  // Función para reiniciar la alerta (Botón Reactivar)
   const resetAlert = () => {
       localStorage.removeItem("inventory_alert_snooze")
       setAlertSnoozedUntil(null)
-      // Esto fuerza a que LowStockAlert vuelva a comprobar y se abra
       window.dispatchEvent(new Event("storage")) 
   }
 
@@ -73,10 +72,13 @@ export function InventoryManager({ products }: Props) {
 
   return (
     <div>
-        {/* Pasamos 'checkSnoozeStatus' para que al posponer se actualice el icono de la campana */}
         <LowStockAlert 
-            products={products} 
-            onReview={() => setFilterMode('low')} 
+            products={alertProducts} // <--- Usamos la lista GLOBAL
+            onReview={() => {
+                // Al revisar, forzamos ir a la vista de "Stock Bajo" real
+                // para asegurarnos de que el usuario vea los items, aunque esté en otra categoría.
+                router.push('/inventory?filter=low_stock')
+            }} 
             onSnoozeChange={checkSnoozeStatus} 
         />
 
@@ -90,11 +92,9 @@ export function InventoryManager({ products }: Props) {
             
             <div className="flex gap-2 items-center">
                 
-                {/* --- AQUÍ ESTÁ EL BOTÓN QUE FALTABA (LA CAMPANA) --- */}
                 <Popover>
                     <PopoverTrigger asChild>
                         <Button variant="outline" size="icon" className={alertSnoozedUntil ? "text-orange-500 bg-orange-50 border-orange-200" : "text-zinc-400"}>
-                            {/* Si está dormida muestra campana tachada, si no, campana normal */}
                             {alertSnoozedUntil ? <BellOff size={18} /> : <Bell size={18} />}
                         </Button>
                     </PopoverTrigger>
@@ -128,9 +128,8 @@ export function InventoryManager({ products }: Props) {
                     </PopoverContent>
                 </Popover>
 
-                <div className="h-6 w-px bg-zinc-200 mx-1" /> {/* Separador visual */}
+                <div className="h-6 w-px bg-zinc-200 mx-1" />
 
-                {/* BOTONES DE FILTRO (Ya los tenías) */}
                 {filterMode === 'low' ? (
                     <Button variant="outline" onClick={() => setFilterMode('all')} className="gap-2 text-zinc-600">
                         <XCircle size={16}/> Mostrar Todo
@@ -148,7 +147,6 @@ export function InventoryManager({ products }: Props) {
             </div>
         </div>
 
-        {/* --- RESTO DEL CÓDIGO (Barra flotante y Tabla) SE MANTIENE IGUAL --- */}
         {selectedIds.length > 0 && (
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-4 animate-in slide-in-from-bottom-5">
                 <span className="font-bold">{selectedIds.length} seleccionados</span>
@@ -194,7 +192,7 @@ export function InventoryManager({ products }: Props) {
                     <TableRow>
                       <TableCell colSpan={6} className="h-32 text-center text-zinc-500">
                         {filterMode === 'low' 
-                            ? "¡Todo en orden! No hay productos con stock bajo." 
+                            ? "¡Todo en orden! No hay productos con stock bajo en esta vista." 
                             : "Sin resultados."}
                       </TableCell>
                     </TableRow>
