@@ -18,7 +18,6 @@ export function InventoryStats({ stats }: { stats: Stats }) {
 
   const handleFilter = (filter: string) => {
     const params = new URLSearchParams(searchParams)
-    // Si damos clic al mismo que ya está, o a "Total", quitamos el filtro
     if (filter === "all") {
       params.delete("filter")
     } else {
@@ -27,42 +26,47 @@ export function InventoryStats({ stats }: { stats: Stats }) {
     router.replace(`?${params.toString()}`)
   }
 
+  // DEFINICIÓN DE COLORES EXACTOS SEGÚN TU DISEÑO
   const cards = [
     {
       label: "Total Activos",
       value: stats.total,
       icon: Package,
       filter: "all",
-      color: "text-blue-600",
-      bg: "bg-blue-50",
-      border: "border-blue-200"
+      // Color: #212130
+      bgColor: "bg-[#212130]",
+      hoverColor: "hover:bg-[#212130]/90",
+      textColor: "text-white"
     },
     {
       label: "Herramientas",
       value: stats.tools,
       icon: Hammer,
       filter: "Herramienta",
-      color: "text-indigo-600",
-      bg: "bg-indigo-50",
-      border: "border-indigo-200"
+      // Color: #2a2a3d
+      bgColor: "bg-[#2a2a3d]",
+      hoverColor: "hover:bg-[#2a2a3d]/90",
+      textColor: "text-white"
     },
     {
       label: "Consumibles",
       value: stats.consumables,
       icon: PaintBucket,
       filter: "Consumible",
-      color: "text-amber-600",
-      bg: "bg-amber-50",
-      border: "border-amber-200"
+      // Color: #56567d
+      bgColor: "bg-[#56567d]",
+      hoverColor: "hover:bg-[#56567d]/90",
+      textColor: "text-white"
     },
     {
       label: "Stock Bajo",
       value: stats.lowStock,
       icon: AlertTriangle,
       filter: "low_stock",
-      color: "text-red-600",
-      bg: "bg-red-50",
-      border: "border-red-200"
+      // Color: #8282bd
+      bgColor: "bg-[#8282bd]",
+      hoverColor: "hover:bg-[#8282bd]/90",
+      textColor: "text-white"
     }
   ]
 
@@ -74,17 +78,17 @@ export function InventoryStats({ stats }: { stats: Stats }) {
           <Card 
             key={card.label}
             onClick={() => handleFilter(card.filter)}
-            className={`cursor-pointer transition-all hover:shadow-md ${
-              isActive ? `ring-2 ring-zinc-900 ring-offset-2 ${card.border}` : "border-zinc-200"
+            className={`cursor-pointer transition-all border-none shadow-md ${card.bgColor} ${card.hoverColor} ${
+                isActive ? "ring-2 ring-offset-2 ring-zinc-400" : ""
             }`}
           >
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-zinc-500">{card.label}</p>
-                <p className="text-2xl font-bold text-zinc-900">{card.value}</p>
+                <p className={`text-sm font-medium opacity-80 ${card.textColor}`}>{card.label}</p>
+                <p className={`text-2xl font-bold ${card.textColor}`}>{card.value}</p>
               </div>
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${card.bg} ${card.color}`}>
-                <card.icon size={20} />
+              <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm">
+                <card.icon size={20} className={card.textColor} />
               </div>
             </CardContent>
           </Card>

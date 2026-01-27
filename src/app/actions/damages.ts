@@ -1,84 +1,74 @@
-'use server'
+"use server"
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 
-// 1. Obtener historial de daños
-export async function getIncidents() {
-  try {
-    const incidents = await prisma.incident.findMany({
-      orderBy: { date: 'desc' },
-      include: {
-        product: true,
-        employee: true
-      }
-    })
-    return { success: true, data: incidents }
-  } catch (error) {
-    return { success: false, error: "Error al cargar incidentes" }
-  }
-}
-
-// 2. Reportar un daño
-export async function reportDamage(formData: FormData) {
+export async function createDamageReport(formData: FormData) {
   const productId = parseInt(formData.get("productId") as string)
-  const employeeIdRaw = formData.get("employeeId") as string
-  const description = formData.get("description") as string
-  const type = formData.get("type") as string // "directo" (almacén) o "prestamo" (lo trajo roto)
+  const quantity = parseInt(formData.get("quantity") as string)
+  const reason = formData.get("reason") as string
+  const notes = formData.get("notes") as string
+  // Capturamos la clave específica seleccionada (si existe)
+  const supplierCode = formData.get("supplierCode") as string 
 
-  const employeeId = employeeIdRaw ? parseInt(employeeIdRaw) : null
+  if (!productId || !quantity || !reason) {
+    return { success: false, error: "Faltan datos obligatorios" }
+  }
 
   try {
     await prisma.$transaction(async (tx) => {
-      // A. Registrar el incidente
-      await tx.incident.create({
+      // 1. Verificar stock
+      const product = await tx.product.findUnique({ where: { id: productId } })
+      if (!product) throw new Error("Producto no encontrado")
+      if (product.stock < quantity) throw new Error("Stock insuficiente")
+
+      // 2. Crear el reporte con la clave específica
+      await tx.damageReport.create({
         data: {
           productId,
-          employeeId,
-          description,
-          status: "dañado"
-        }
+          quantity,
+          reason,
+          notes,
+          affectedSupplierCode: supplierCode || product.shortCode, // Usamos la seleccionada o la default
+          date: new Date(),
+        },
       })
 
-      // B. Ajustar inventario según el caso
-      if (type === "directo") {
-        // Estaba en almacén y se rompió -> Restamos stock
-        await tx.product.update({
-          where: { id: productId },
-          data: { stock: { decrement: 1 } }
-        })
-      } 
-      // Si era de un préstamo, asumimos que ya se había restado el stock al prestarlo.
-      // Pero necesitamos cerrar el préstamo si existe uno activo.
-      else if (type === "prestamo" && employeeId) {
-        // Buscar si hay préstamo activo de este producto y este empleado
-        const activeLoan = await tx.loan.findFirst({
-            where: { 
-                productId, 
-                employeeId, 
-                status: "prestado" 
-            }
-        })
-
-        if (activeLoan) {
-            // Lo marcamos como "devuelto con daño" para que deje de estar activo
-            await tx.loan.update({
-                where: { id: activeLoan.id },
-                data: { 
-                    status: "devuelto_dañado", 
-                    dateReturn: new Date() 
-                }
-            })
-            // OJO: NO sumamos el stock de vuelta, porque está roto.
-        }
-      }
+      // 3. Restar del inventario general
+      await tx.product.update({
+        where: { id: productId },
+        data: { stock: { decrement: quantity } },
+      })
     })
 
     revalidatePath("/damages")
-    revalidatePath("/") // Actualizar stock dashboard
+    revalidatePath("/inventory")
+    revalidatePath("/")
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || "Error al procesar" }
+  }
+}
+
+// La función de eliminar se mantiene igual (reversión de stock)
+export async function deleteDamageReport(reportId: number) {
+  try {
+    await prisma.$transaction(async (tx) => {
+      const report = await tx.damageReport.findUnique({ where: { id: reportId } })
+      if (!report) throw new Error("Reporte no encontrado")
+
+      await tx.product.update({
+        where: { id: report.productId },
+        data: { stock: { increment: report.quantity } }
+      })
+
+      await tx.damageReport.delete({ where: { id: reportId } })
+    })
+
+    revalidatePath("/damages")
+    revalidatePath("/inventory")
     return { success: true }
   } catch (error) {
-    console.error(error)
-    return { success: false, error: "Error al registrar daño" }
+    return { success: false, error: "Error al eliminar" }
   }
 }

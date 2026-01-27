@@ -54,12 +54,7 @@ export function ExcelImport() {
         return
       }
 
-      // --- CORRECCIÓN AQUÍ ---
-      // Convertimos a JSON puro para eliminar métodos ocultos o prototipos de la librería 'xlsx'
-      // Esto soluciona el error: "Only plain objects can be passed to Server Functions"
       const cleanData = JSON.parse(JSON.stringify(jsonData))
-
-      // Enviamos los datos limpios al servidor
       const result = await importProductsFromExcel(cleanData)
 
       if (result.success) {
@@ -80,26 +75,26 @@ export function ExcelImport() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
+        {/* BOTÓN ACTUALIZADO: NEGRO #232323 */}
         <Button 
             size="sm" 
-            className="h-7 text-xs gap-2 bg-green-600 text-white hover:bg-green-700 shadow-sm px-3"
+            className="h-8 text-xs gap-2 bg-[#232323] text-white hover:bg-[#232323]/90 shadow-sm px-3 font-medium"
         >
-            <FileSpreadsheet size={12} /> Carga Masiva (Excel)
+            <FileSpreadsheet size={14} /> Importar Excel
         </Button>
       </DialogTrigger>
+      
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="text-green-600"/> Importar desde Excel
           </DialogTitle>
-          
           <DialogDescription>
             Sube tu archivo para importar productos masivamente.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
-            
             <div className="flex flex-col gap-2 p-3 bg-green-50 rounded-lg border border-green-100 text-green-900 text-sm">
                 <div className="flex items-center gap-2 font-medium">
                     <FileDown size={16} className="text-green-600"/>

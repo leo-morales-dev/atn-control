@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Source_Sans_3 } from "next/font/google"; // <--- CAMBIO DE FUENTE
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar"; // <--- Importamos
-import { ContentWrapper } from "@/components/ContentWrapper"; // <--- Importalo
-import { SessionGuard } from "@/components/SessionGuard"; // <--- Importar
-import { Toaster } from "sonner"; // <--- Importar
+import { Sidebar } from "@/components/Sidebar";
+import { ContentWrapper } from "@/components/ContentWrapper";
+import { SessionGuard } from "@/components/SessionGuard";
+import { Toaster } from "sonner";
 
-const inter = Inter({ subsets: ["latin"] });
+// Configuramos la fuente Source Sans Pro (Source Sans 3 en Google Fonts)
+const sourceSans = Source_Sans_3({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "ATN Control",
@@ -20,8 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${inter.className} bg-gray-50 text-zinc-900`}>
-        {/* Agrega el guardia aquí, antes del contenido */}
+      <body className={`${sourceSans.className} bg-gray-50 text-[#444444]`}>
         <SessionGuard /> 
         
         <div className="flex min-h-screen">

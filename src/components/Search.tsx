@@ -10,7 +10,6 @@ export function Search({ placeholder }: { placeholder: string }) {
   const pathname = usePathname()
   const { replace } = useRouter()
 
-  // Espera 300ms después de que dejas de escribir para buscar
   const handleSearch = useDebouncedCallback((term: string) => {
     const params = new URLSearchParams(searchParams)
     
@@ -20,8 +19,10 @@ export function Search({ placeholder }: { placeholder: string }) {
       params.delete('query')
     }
     
-    // Actualiza la URL sin recargar la página
-    replace(`${pathname}?${params.toString()}`)
+    // CORRECCIÓN AQUÍ: Agregamos { scroll: false }
+    // Esto evita que la página salte hacia arriba al buscar
+    replace(`${pathname}?${params.toString()}`, { scroll: false })
+    
   }, 300)
 
   return (

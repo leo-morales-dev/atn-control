@@ -1,95 +1,110 @@
 import { getDashboardStats } from "@/app/actions/dashboard"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Package, AlertTriangle, ArrowRightLeft, TrendingUp, Clock, CalendarDays, Box } from "lucide-react"
+import { Package, AlertTriangle, ArrowRightLeft, CalendarDays, Box, Clock } from "lucide-react"
 import { DashboardCharts } from "@/components/DashboardCharts"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import prisma from "@/lib/prisma"
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-  const { data } = await getDashboardStats()
-  
-  if (!data) return (
-    <div className="min-h-screen flex items-center justify-center text-zinc-400">
-        Cargando estadísticas...
-    </div>
-  )
+  const [statsRes] = await Promise.all([
+    getDashboardStats(),
+    // Ya no necesitamos cargar productos/empleados aquí porque quitamos los botones
+  ])
 
-  // Fecha actual formateada
+  const stats = statsRes.data || {
+    totalProducts: 0,
+    lowStockProducts: 0,
+    activeLoansCount: 0,
+    recentActivity: [],
+    chartData: []
+  }
+
+  // Fecha actual
   const today = new Date().toLocaleDateString('es-MX', { 
     weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+    day: 'numeric',
+    month: 'long' 
   })
-  // Capitalizar primera letra
   const formattedDate = today.charAt(0).toUpperCase() + today.slice(1)
 
   return (
-    <main className="min-h-screen bg-zinc-50/50 p-6 md:p-10">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <main className="min-h-screen bg-gray-50/30 p-6 font-sans">
+      <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* --- HEADER --- */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-200 pb-6">
+        {/* --- HEADER (Solo Bienvenida) --- */}
+        <div className="flex flex-col md:flex-row justify-between items-end gap-4 pb-2">
             <div>
-                <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900">Panel de Control</h1>
-                <p className="text-zinc-500 mt-1">Visión general del inventario y operaciones.</p>
+                <h1 className="text-3xl font-bold tracking-tight text-[#444444]">Dashboard</h1>
+                {/* MENSAJE DE BIENVENIDA */}
+                <p className="text-[#444444]/60 mt-1 font-medium text-sm">
+                    Bienvenido de nuevo, aquí tienes el resumen de hoy.
+                </p>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-white border border-zinc-200 rounded-full shadow-sm text-sm text-zinc-600 font-medium">
-                <CalendarDays size={16} className="text-blue-600"/>
+            
+            {/* Solo Fecha */}
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm text-sm text-[#444444] font-semibold border border-gray-100">
+                <CalendarDays size={16} className="text-[#444444]"/>
                 {formattedDate}
             </div>
         </div>
 
         {/* --- TARJETAS DE MÉTRICAS --- */}
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-3">
           
-          {/* 1. Total Productos */}
-          <Card className="border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-all duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Inventario Total</CardTitle>
-              <div className="h-9 w-9 rounded-full bg-blue-50 flex items-center justify-center">
-                  <Package className="h-5 w-5 text-blue-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-black text-zinc-900">{data.totalProducts}</div>
-              <p className="text-xs text-zinc-500 mt-1 flex items-center gap-1">
-                <TrendingUp size={12} className="text-green-600"/> Items registrados
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* 2. Stock Bajo */}
-          <Card className={`border-l-4 shadow-sm hover:shadow-md transition-all duration-200 ${data.lowStockProducts > 0 ? 'border-l-red-500 bg-red-50/10' : 'border-l-green-500'}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className={`text-xs font-bold uppercase tracking-wider ${data.lowStockProducts > 0 ? 'text-red-600' : 'text-zinc-500'}`}>
-                Alerta Stock
+          {/* 1. TOTAL STOCK */}
+          <Card className="bg-[#444444] border-none shadow-md text-white py-4 gap-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-5">
+              <CardTitle className="text-sm font-semibold text-white/90">
+                Total Stock
               </CardTitle>
-              <div className={`h-9 w-9 rounded-full flex items-center justify-center ${data.lowStockProducts > 0 ? 'bg-red-100' : 'bg-green-100'}`}>
-                 <AlertTriangle className={`h-5 w-5 ${data.lowStockProducts > 0 ? 'text-red-600' : 'text-green-600'}`} />
+              <div className="h-8 w-8 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
+                  <Package className="h-4 w-4 text-white" />
               </div>
             </CardHeader>
-            <CardContent>
-              <div className={`text-3xl font-black ${data.lowStockProducts > 0 ? 'text-red-600' : 'text-zinc-900'}`}>
-                {data.lowStockProducts}
-              </div>
-              <p className="text-xs text-zinc-500 mt-1 font-medium">
-                {data.lowStockProducts > 0 ? "Requieren reabastecimiento" : "Niveles óptimos"}
+            <CardContent className="px-5 pt-0">
+              <div className="text-3xl font-bold text-white">{stats.totalProducts}</div>
+              <p className="text-xs text-white/50 mt-0.5 font-medium">
+                 Productos registrados
               </p>
             </CardContent>
           </Card>
 
-          {/* 3. Préstamos Activos */}
-          <Card className="border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-all duration-200">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Préstamos Activos</CardTitle>
-              <div className="h-9 w-9 rounded-full bg-amber-50 flex items-center justify-center">
-                 <ArrowRightLeft className="h-5 w-5 text-amber-600" />
+          {/* 2. STOCK BAJO */}
+          <Card className="bg-white border-none shadow-sm text-[#444444] py-4 gap-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-5">
+              <CardTitle className="text-sm font-semibold text-[#444444]/70">
+                Stock Bajo
+              </CardTitle>
+              <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                 <AlertTriangle className="h-4 w-4 text-[#444444]" />
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-black text-zinc-900">{data.activeLoansCount}</div>
-              <p className="text-xs text-zinc-500 mt-1 font-medium text-amber-700">
+            <CardContent className="px-5 pt-0">
+              <div className="text-3xl font-bold text-[#444444]">
+                {stats.lowStockProducts}
+              </div>
+              <p className="text-xs text-[#444444]/50 mt-0.5 font-medium">
+                Requieren atención
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 3. PRÉSTAMOS ACTIVOS */}
+          <Card className="bg-white border-none shadow-sm text-[#444444] py-4 gap-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-5">
+              <CardTitle className="text-sm font-semibold text-[#444444]/70">
+                Préstamos Activos
+              </CardTitle>
+              <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                 <ArrowRightLeft className="h-4 w-4 text-[#444444]" />
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pt-0">
+              <div className="text-3xl font-bold text-[#444444]">{stats.activeLoansCount}</div>
+              <p className="text-xs text-[#444444]/50 mt-0.5 font-medium">
                 Herramientas fuera
               </p>
             </CardContent>
@@ -99,70 +114,66 @@ export default async function DashboardPage() {
         {/* --- SECCIÓN PRINCIPAL --- */}
         <div className="grid gap-6 md:grid-cols-7">
             
-            {/* GRÁFICA (4 columnas) */}
-            <Card className="col-span-full md:col-span-4 shadow-sm border-zinc-200">
-                <CardHeader>
-                    <CardTitle className="text-lg font-bold text-zinc-800">Tendencia Semanal</CardTitle>
-                    <CardDescription>Flujo de salidas de material (7 días)</CardDescription>
+            {/* GRÁFICA */}
+            <Card className="col-span-full md:col-span-4 border-none shadow-sm bg-white py-2">
+                <CardHeader className="pb-0 px-6">
+                    <CardTitle className="text-lg font-bold text-[#444444]">Actividad Semanal</CardTitle>
+                    <CardDescription className="text-[#444444]/50 text-xs">Salidas de material (7 días)</CardDescription>
                 </CardHeader>
-                <CardContent className="pl-0">
-                    <DashboardCharts data={data.chartData} />
+                <CardContent className="pl-0 px-6">
+                    {/* Renderizamos el componente puro */}
+                    <DashboardCharts data={stats.chartData} />
                 </CardContent>
             </Card>
 
-            {/* LISTA RECIENTE (3 columnas) */}
-            <Card className="col-span-full md:col-span-3 shadow-sm border-zinc-200 flex flex-col">
-                <CardHeader className="pb-4 border-b border-zinc-100 mb-2">
-                    <CardTitle className="text-lg font-bold text-zinc-800 flex items-center gap-2">
-                        <Clock size={18} className="text-zinc-400"/> Actividad Reciente
-                    </CardTitle>
+            {/* LISTA RECIENTE */}
+            {/* AGREGADO: 'gap-0' para quitar el espacio grande entre Header y Content */}
+            <Card className="col-span-full md:col-span-3 border-none shadow-sm bg-white flex flex-col h-full max-h-[450px] gap-0">
+                <CardHeader className="border-b border-gray-50 py-4 bg-white px-6">
+                    <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg font-bold text-[#444444] flex items-center gap-2">
+                             Movimientos Recientes
+                        </CardTitle>
+                        <Badge variant="secondary" className="bg-gray-100 text-[#444444]/60 font-normal text-[10px]">
+                            Últimos 5
+                        </Badge>
+                    </div>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-auto pr-2">
-                    <div className="space-y-6">
-                        {data.recentActivity.length === 0 ? (
-                            <div className="h-40 flex flex-col items-center justify-center text-zinc-400 text-sm">
-                                <Package size={32} className="mb-2 opacity-20"/>
-                                Sin movimientos recientes
+                <CardContent className="p-0 flex-1 overflow-auto">
+                    <div className="divide-y divide-gray-50">
+                        {stats.recentActivity.length === 0 ? (
+                            <div className="p-8 text-center text-[#444444]/40 text-sm">
+                                Sin movimientos registrados hoy
                             </div>
                         ) : (
-                            data.recentActivity.map((loan: any) => {
-                                // Determinamos tipo visualmente
-                                const isConsumable = loan.status === 'consumido'
-                                
-                                return (
-                                    <div key={loan.id} className="flex items-start gap-3 group">
-                                        {/* Ícono dinámico */}
-                                        <div className={`mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                                            isConsumable ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
-                                        }`}>
-                                            {isConsumable ? <Box size={16}/> : <ArrowRightLeft size={16}/>}
-                                        </div>
-                                        
-                                        <div className="space-y-1 w-full min-w-0">
-                                            <div className="flex justify-between items-start gap-2">
-                                                <p className="text-sm font-semibold text-zinc-800 truncate">
-                                                    {loan.employee?.name || "Personal General"}
-                                                </p>
-                                                <span className="text-[10px] text-zinc-400 font-mono whitespace-nowrap bg-zinc-50 px-1.5 py-0.5 rounded border border-zinc-100">
-                                                    {new Date(loan.dateOut).toLocaleDateString()}
-                                                </span>
-                                            </div>
-                                            
-                                            <p className="text-xs text-zinc-500 truncate">
-                                                <span className={`font-medium ${isConsumable ? 'text-purple-600' : 'text-blue-600'}`}>
-                                                    {isConsumable ? 'Consumió' : 'Retiró'}:
-                                                </span> {loan.product?.description || loan.backupProduct}
+                            stats.recentActivity.map((loan: any) => (
+                                <div key={loan.id} className="flex items-center gap-3 p-3 px-6 hover:bg-gray-50/50 transition-colors">
+                                    <Avatar className="h-8 w-8 border border-gray-100">
+                                        <AvatarFallback className="bg-gray-100 text-[#444444] text-[10px] font-bold">
+                                            {loan.employee?.name?.substring(0, 2).toUpperCase() || "SN"}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-center">
+                                            <p className="text-sm font-bold text-[#444444] truncate">
+                                                {loan.employee?.name || "Desconocido"}
                                             </p>
+                                            <span className="text-[10px] text-[#444444]/40 font-mono">
+                                                {new Date(loan.dateOut).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                            </span>
                                         </div>
+                                        <p className="text-xs text-[#444444]/60 truncate">
+                                            {loan.product?.description}
+                                        </p>
                                     </div>
-                                )
-                            })
+                                </div>
+                            ))
                         )}
                     </div>
                 </CardContent>
             </Card>
         </div>
-
       </div>
     </main>
   )
