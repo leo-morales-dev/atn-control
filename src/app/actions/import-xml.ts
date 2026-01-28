@@ -4,16 +4,16 @@ import { parseStringPromise } from 'xml2js'
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 
-// Estructura de lo que extraemos del XML
 export interface XmlItem {
-  noIdentificacion: string // Código del proveedor
+  noIdentificacion: string 
   descripcion: string
   cantidad: number
   valorUnitario: number
   unidad?: string
+  providerName?: string // <--- Nuevo: Guardaremos el nombre del proveedor
 }
 
-// 1. LEER XML Y BUSCAR COINCIDENCIAS
+// 1. LEER XML (Ahora extrae el Proveedor)
 export async function parseFacturaXML(formData: FormData) {
   const file = formData.get('xml') as File
   if (!file) return { success: false, error: "No se subió archivo" }
@@ -22,59 +22,60 @@ export async function parseFacturaXML(formData: FormData) {
     const text = await file.text()
     const result = await parseStringPromise(text)
     
-    // Navegamos la estructura compleja del CFDI
     const comprobante = result['cfdi:Comprobante']
-    const conceptos = comprobante['cfdi:Conceptos'][0]['cfdi:Concepto']
+    // Extraemos el nombre del emisor (Proveedor) del XML
+    const emisorData = comprobante['cfdi:Emisor']?.[0]?.['$']
+    const providerName = emisorData?.Nombre || "Proveedor Desconocido"
 
+    const conceptos = comprobante['cfdi:Conceptos'][0]['cfdi:Concepto']
     const items: XmlItem[] = []
 
-    // Extraemos datos limpios
     for (const c of conceptos) {
-      const attrs = c['$'] // En xml2js los atributos están en '$'
+      const attrs = c['$'] 
       items.push({
         noIdentificacion: attrs.NoIdentificacion || attrs.ClaveProdServ || 'S/N',
         descripcion: attrs.Descripcion,
         cantidad: parseFloat(attrs.Cantidad),
         valorUnitario: parseFloat(attrs.ValorUnitario),
-        unidad: attrs.Unidad || attrs.ClaveUnidad
+        unidad: attrs.Unidad || attrs.ClaveUnidad,
+        providerName: providerName // Pasamos el proveedor a cada item
       })
     }
 
-    // Buscamos candidatos en la BD para sugerir vínculos
     const itemsWithSuggestions = await Promise.all(items.map(async (item) => {
-      // Buscamos si ya existe un producto con ese código exacto
       const match = await prisma.product.findFirst({
         where: {
             OR: [
                 { code: item.noIdentificacion },
-                { shortCode: item.noIdentificacion }
+                // Buscamos también en la nueva tabla de claves
+                { supplierCodes: { some: { code: item.noIdentificacion } } } 
             ]
         }
       })
       
-      return {
-        ...item,
-        suggestedProduct: match // Enviamos el producto completo si lo encontramos
-      }
+      return { ...item, suggestedProduct: match }
     }))
 
     return { success: true, data: itemsWithSuggestions }
 
   } catch (error) {
     console.error(error)
-    return { success: false, error: "Error al leer el XML. Asegúrate que sea un CFDI válido." }
+    return { success: false, error: "Error al leer el XML. Estructura no válida." }
   }
 }
 
-// 2. GUARDAR LOS DATOS CONFIRMADOS
-
+// 2. GUARDAR DATOS (Lógica corregida para SupplierCode)
 export async function processXmlImport(items: any[]) {
   try {
     await prisma.$transaction(async (tx) => {
       for (const item of items) {
         
+        // Clave del proveedor actual en el XML
+        const newCode = item.shortCode || item.code
+        const provider = item.providerName || "Proveedor General"
+
         if (item.action === 'create') {
-          // CASO 1: CREAR NUEVO (Sin cambios)
+          // --- CASO 1: CREAR ---
           await tx.product.create({
             data: {
               code: item.code,
@@ -82,37 +83,53 @@ export async function processXmlImport(items: any[]) {
               category: item.category,
               stock: item.quantity,
               minStock: item.minStock || 5,
-              shortCode: item.shortCode || item.code 
+              shortCode: newCode, 
+              // AQUÍ ESTÁ LA MAGIA: Creamos la relación inicial
+              supplierCodes: {
+                create: {
+                    code: newCode,
+                    provider: provider
+                }
+              }
             }
           })
 
         } else if (item.action === 'link' && item.linkedProductId) {
-          // CASO 2: VINCULAR (MEJORADO)
+          // --- CASO 2: VINCULAR ---
+          const prodId = item.linkedProductId
           
-          // A. Primero buscamos el producto para ver qué claves tiene hoy
-          const currentProd = await tx.product.findUnique({
-             where: { id: item.linkedProductId }
+          // A. Verificar si esta clave ya existe para este producto
+          const existingKey = await tx.supplierCode.findFirst({
+              where: { 
+                  productId: prodId,
+                  code: newCode
+              }
           })
 
-          if (currentProd) {
-             // B. Lógica de Concatenación
-             let updatedShortCode = currentProd.shortCode || ""
-             const newProviderCode = item.shortCode || "" // Esta es la clave del XML nuevo (ej. PROV2)
+          // B. Si no existe, la creamos en la tabla SupplierCode
+          if (!existingKey && newCode) {
+              await tx.supplierCode.create({
+                  data: {
+                      productId: prodId,
+                      code: newCode,
+                      provider: provider
+                  }
+              })
+          }
 
-             // Solo la agregamos si NO existe ya en el texto
-             // (Así evitamos que diga "PROV1 / PROV1 / PROV1" si subes la misma factura 3 veces)
-             if (newProviderCode && !updatedShortCode.includes(newProviderCode)) {
-                 updatedShortCode = updatedShortCode 
-                    ? `${updatedShortCode} / ${newProviderCode}` // Si ya había algo, agregamos " / "
-                    : newProviderCode // Si estaba vacío, ponemos la nueva
+          // C. Actualizar Stock y Texto "shortCode" (para búsqueda rápida visual)
+          const currentProd = await tx.product.findUnique({ where: { id: prodId } })
+          if (currentProd) {
+             let updatedShortCode = currentProd.shortCode || ""
+             if (newCode && !updatedShortCode.includes(newCode)) {
+                 updatedShortCode = updatedShortCode ? `${updatedShortCode} / ${newCode}` : newCode
              }
 
-             // C. Actualizamos Stock Y las Claves
              await tx.product.update({
-                where: { id: item.linkedProductId },
+                where: { id: prodId },
                 data: {
                   stock: { increment: item.quantity },
-                  shortCode: updatedShortCode // <--- AQUÍ GUARDAMOS LA LISTA COMBINADA
+                  shortCode: updatedShortCode
                 }
              })
           }
@@ -124,6 +141,6 @@ export async function processXmlImport(items: any[]) {
     return { success: true }
   } catch (error) {
     console.error(error)
-    return { success: false, error: "Error al procesar la importación." }
+    return { success: false, error: "Error al procesar importación." }
   }
 }

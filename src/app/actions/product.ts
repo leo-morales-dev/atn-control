@@ -175,27 +175,41 @@ export async function deleteProductById(id: number) {
   }
 }
 
+// --- FUNCIÓN A REEMPLAZAR ---
 export async function createOrUpdateProduct(data: FormData) {
-  const mode = data.get("mode") as string // "create" o "link"
-  
-  // Datos comunes
+  const mode = data.get("mode") as string 
   const quantity = parseInt(data.get("quantity") as string) || 0
-  const providerKey = data.get("shortCode") as string || "" // La clave del proveedor
+  const providerKey = data.get("shortCode") as string || "" 
 
   try {
     if (mode === "link") {
-      // --- MODO VINCULAR (Sumar Stock) ---
+      // --- VINCULAR (Manual) ---
       const productId = parseInt(data.get("linkedProductId") as string)
-
       const currentProd = await prisma.product.findUnique({ where: { id: productId } })
+      
       if (!currentProd) throw new Error("Producto no encontrado")
 
-      // Lógica de fusión de claves (Igual que el XML)
+      // 1. Guardar en SupplierCode si es una clave nueva
+      if (providerKey) {
+          const existing = await prisma.supplierCode.findFirst({
+              where: { productId, code: providerKey }
+          })
+          
+          if (!existing) {
+              await prisma.supplierCode.create({
+                  data: {
+                      productId,
+                      code: providerKey,
+                      provider: "Ingreso Manual" 
+                  }
+              })
+          }
+      }
+
+      // 2. Actualizar stock y visual
       let updatedShortCode = currentProd.shortCode || ""
       if (providerKey && !updatedShortCode.includes(providerKey)) {
-          updatedShortCode = updatedShortCode 
-            ? `${updatedShortCode} / ${providerKey}` 
-            : providerKey
+          updatedShortCode = updatedShortCode ? `${updatedShortCode} / ${providerKey}` : providerKey
       }
 
       await prisma.product.update({
@@ -207,7 +221,7 @@ export async function createOrUpdateProduct(data: FormData) {
       })
 
     } else {
-      // --- MODO CREAR NUEVO ---
+      // --- CREAR NUEVO (Manual) ---
       const code = data.get("code") as string
       const description = data.get("description") as string
       const category = data.get("category") as string
@@ -220,7 +234,11 @@ export async function createOrUpdateProduct(data: FormData) {
           category,
           stock: quantity,
           minStock,
-          shortCode: providerKey // Aquí guardamos la clave inicial
+          shortCode: providerKey,
+          // Creamos la relación aquí también
+          supplierCodes: {
+              create: providerKey ? [{ code: providerKey, provider: "Ingreso Manual" }] : []
+          }
         }
       })
     }

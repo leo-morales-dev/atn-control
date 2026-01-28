@@ -75,12 +75,11 @@ export function ExcelImport() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {/* BOTÓN ACTUALIZADO: NEGRO #232323 */}
+        {/* BOTÓN EXCEL: Rojo, Ancho Fijo, Sin size="sm" */}
         <Button 
-            size="sm" 
-            className="h-8 text-xs gap-2 bg-[#232323] text-white hover:bg-[#232323]/90 shadow-sm px-3 font-medium"
+            className="h-10 w-[140px] gap-2 bg-[#de2d2d] text-white hover:bg-[#de2d2d]/90 shadow-sm px-3 font-medium border-none"
         >
-            <FileSpreadsheet size={14} /> Importar Excel
+            <FileSpreadsheet size={16} /> Importar Excel
         </Button>
       </DialogTrigger>
       

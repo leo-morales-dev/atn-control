@@ -15,6 +15,7 @@ interface Report {
   reason: string
   notes: string | null
   date: Date
+  affectedSupplierCode: string | null // <--- 1. Agregamos este campo vital
   product: {
     description: string
     shortCode: string | null
@@ -40,7 +41,8 @@ export function DamageHistoryTable({ reports }: { reports: Report[] }) {
     const data = reports.map(r => ({
         Fecha: new Date(r.date).toLocaleDateString(),
         Hora: new Date(r.date).toLocaleTimeString(),
-        Clave_Prov: r.product.shortCode || "N/A",
+        // 2. CORRECCIÓN EN EXCEL: Usamos la clave afectada específica
+        Clave_Prov: r.affectedSupplierCode || r.product.shortCode || "N/A",
         Codigo_Interno: r.product.code,
         Producto: r.product.description,
         Cantidad: r.quantity,
@@ -51,7 +53,6 @@ export function DamageHistoryTable({ reports }: { reports: Report[] }) {
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.json_to_sheet(data)
     
-    // Ajustar ancho de columnas
     const wscols = [{wch:12}, {wch:10}, {wch:15}, {wch:15}, {wch:40}, {wch:10}, {wch:15}, {wch:30}]
     ws['!cols'] = wscols
 
@@ -70,7 +71,6 @@ export function DamageHistoryTable({ reports }: { reports: Report[] }) {
 
   return (
     <div className="space-y-4">
-        {/* BARRA DE ACCIONES DE LA TABLA */}
         <div className="flex justify-end">
             <Button variant="outline" size="sm" onClick={exportExcel} className="gap-2 border-zinc-200 text-zinc-600 hover:text-[#232323]">
                 <FileSpreadsheet size={14}/> Exportar Historial
@@ -105,9 +105,12 @@ export function DamageHistoryTable({ reports }: { reports: Report[] }) {
                                         <span>{new Date(report.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                     </div>
                                 </TableCell>
+                                
+                                {/* 3. CORRECCIÓN EN TABLA: Priorizamos affectedSupplierCode */}
                                 <TableCell className="font-mono text-xs font-medium text-zinc-600">
-                                    {report.product.shortCode || "---"}
+                                    {report.affectedSupplierCode || report.product.shortCode || "---"}
                                 </TableCell>
+
                                 <TableCell className="text-sm font-medium text-[#232323]">
                                     {report.product.description}
                                     {report.notes && (

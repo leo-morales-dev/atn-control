@@ -26,47 +26,31 @@ export function InventoryStats({ stats }: { stats: Stats }) {
     router.replace(`?${params.toString()}`)
   }
 
-  // DEFINICIÓN DE COLORES EXACTOS SEGÚN TU DISEÑO
+  // Definimos solo los datos, los colores ahora son lógicos
   const cards = [
     {
       label: "Total Activos",
       value: stats.total,
       icon: Package,
-      filter: "all",
-      // Color: #212130
-      bgColor: "bg-[#212130]",
-      hoverColor: "hover:bg-[#212130]/90",
-      textColor: "text-white"
+      filter: "all"
     },
     {
       label: "Herramientas",
       value: stats.tools,
       icon: Hammer,
-      filter: "Herramienta",
-      // Color: #2a2a3d
-      bgColor: "bg-[#2a2a3d]",
-      hoverColor: "hover:bg-[#2a2a3d]/90",
-      textColor: "text-white"
+      filter: "Herramienta"
     },
     {
       label: "Consumibles",
       value: stats.consumables,
       icon: PaintBucket,
-      filter: "Consumible",
-      // Color: #56567d
-      bgColor: "bg-[#56567d]",
-      hoverColor: "hover:bg-[#56567d]/90",
-      textColor: "text-white"
+      filter: "Consumible"
     },
     {
       label: "Stock Bajo",
       value: stats.lowStock,
       icon: AlertTriangle,
-      filter: "low_stock",
-      // Color: #8282bd
-      bgColor: "bg-[#8282bd]",
-      hoverColor: "hover:bg-[#8282bd]/90",
-      textColor: "text-white"
+      filter: "low_stock"
     }
   ]
 
@@ -74,21 +58,37 @@ export function InventoryStats({ stats }: { stats: Stats }) {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
       {cards.map((card) => {
         const isActive = currentFilter === card.filter
+
         return (
           <Card 
             key={card.label}
             onClick={() => handleFilter(card.filter)}
-            className={`cursor-pointer transition-all border-none shadow-md ${card.bgColor} ${card.hoverColor} ${
-                isActive ? "ring-2 ring-offset-2 ring-zinc-400" : ""
+            // LÓGICA DE COLOR: 
+            // - Si está activo: Rojo (#de2d2d) + Texto Blanco
+            // - Si NO está activo: Blanco + Texto Gris (Hover gris suave)
+            className={`cursor-pointer transition-all duration-200 border-none shadow-sm ${
+                isActive 
+                    ? "bg-[#de2d2d] text-white shadow-md scale-[1.02]" 
+                    : "bg-white text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
             }`}
           >
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <p className={`text-sm font-medium opacity-80 ${card.textColor}`}>{card.label}</p>
-                <p className={`text-2xl font-bold ${card.textColor}`}>{card.value}</p>
+                <p className={`text-sm font-medium ${isActive ? "text-white/80" : "text-zinc-500"}`}>
+                    {card.label}
+                </p>
+                <p className={`text-2xl font-bold ${isActive ? "text-white" : "text-[#232323]"}`}>
+                    {card.value}
+                </p>
               </div>
-              <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm">
-                <card.icon size={20} className={card.textColor} />
+              
+              {/* ÍCONO: Cambia el fondo según el estado */}
+              <div className={`h-10 w-10 rounded-xl flex items-center justify-center transition-colors ${
+                  isActive 
+                    ? "bg-white/20 text-white" 
+                    : "bg-zinc-100 text-zinc-500 group-hover:bg-zinc-200"
+              }`}>
+                <card.icon size={20} />
               </div>
             </CardContent>
           </Card>

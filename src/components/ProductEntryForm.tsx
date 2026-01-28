@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Link as LinkIcon, Wand2, Plus } from "lucide-react"
+import { Link as LinkIcon, Wand2 } from "lucide-react"
 import { createOrUpdateProduct } from "@/app/actions/product"
 import { toast } from "sonner"
 import { SearchableProductSelect } from "@/components/SearchableProductSelect"
 import Link from "next/link"
+import { ExcelImport } from "./ExcelImport"
 
 interface Product {
   id: number
@@ -24,17 +25,14 @@ interface Props {
 
 export function ProductEntryForm({ existingProducts }: Props) {
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState("create") // 'create' | 'link'
+  const [activeTab, setActiveTab] = useState("create") 
   
-  // Estados del formulario
   const [category, setCategory] = useState("Herramienta")
   const [selectedProductId, setSelectedProductId] = useState("")
   const formRef = useRef<HTMLFormElement>(null)
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
-    
-    // Inyectamos el modo y datos que no van en inputs directos
     formData.append("mode", activeTab)
     if (activeTab === "link") {
         if (!selectedProductId) {
@@ -51,9 +49,8 @@ export function ProductEntryForm({ existingProducts }: Props) {
 
     if (res.success) {
       toast.success(activeTab === "create" ? "Producto registrado correctamente" : "Stock actualizado correctamente")
-      formRef.current?.reset() // Limpiar formulario
-      setSelectedProductId("") // Limpiar selección
-      // Opcional: Volver a tab 'create'
+      formRef.current?.reset() 
+      setSelectedProductId("") 
     } else {
       toast.error("Error: " + res.error)
     }
@@ -63,20 +60,31 @@ export function ProductEntryForm({ existingProducts }: Props) {
   return (
     <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6 mb-8">
       
-      {/* CABECERA: Título y Botón Importar */}
-      <div className="flex justify-between items-center mb-6">
+      {/* CABECERA */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h2 className="text-lg font-bold text-zinc-900">Nuevo Ingreso Manual</h2>
-        <Link href="/import">
-            <Button variant="outline" size="sm" className="gap-2 text-zinc-600 border-dashed border-zinc-300">
-                <Wand2 size={14} /> Importar XML
+        
+        {/* BOTONES UNIFICADOS */}
+        <div className="flex items-center gap-2">
+            
+            {/* BOTÓN XML: Rojo, Ancho Fijo, Sin size="sm" */}
+            <Button 
+                asChild
+                className="h-10 w-[140px] gap-2 bg-[#de2d2d] text-white hover:bg-[#de2d2d]/90 shadow-sm px-3 font-medium border-none"
+            >
+                <Link href="/import">
+                    <Wand2 size={16} /> Importar XML
+                </Link>
             </Button>
-        </Link>
+            
+            {/* El botón de Excel se importa aquí */}
+            <ExcelImport />
+        </div>
       </div>
 
       <form ref={formRef} action={handleSubmit}>
         <Tabs defaultValue="create" value={activeTab} onValueChange={setActiveTab} className="w-full">
             
-            {/* PESTAÑAS TIPO "PILL" */}
             <TabsList className="grid w-full max-w-[400px] grid-cols-2 mb-6 bg-zinc-100 p-1 rounded-lg">
                 <TabsTrigger value="create" className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm">
                     Crear Nuevo
@@ -87,26 +95,21 @@ export function ProductEntryForm({ existingProducts }: Props) {
             </TabsList>
 
             <div className="flex flex-col lg:flex-row gap-6 items-end">
-                
-                {/* --- ÁREA VARIABLE SEGÚN PESTAÑA --- */}
                 <div className="flex-1 w-full">
                     
                     {/* CASO 1: CREAR NUEVO */}
                     <TabsContent value="create" className="mt-0">
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                            {/* Código */}
                             <div className="md:col-span-3 space-y-1.5">
                                 <Label className="text-xs text-zinc-500">Código / Serial</Label>
                                 <Input name="code" placeholder="Escanear..." className="bg-zinc-50/50" required={activeTab === 'create'} />
                             </div>
                             
-                            {/* Descripción */}
                             <div className="md:col-span-4 space-y-1.5">
                                 <Label className="text-xs text-zinc-500">Descripción</Label>
                                 <Input name="description" placeholder="Nombre del producto..." className="bg-zinc-50/50" required={activeTab === 'create'} />
                             </div>
 
-                            {/* Categoría */}
                             <div className="md:col-span-2 space-y-1.5">
                                 <Label className="text-xs text-zinc-500">Categoría</Label>
                                 <Select value={category} onValueChange={setCategory}>
@@ -118,13 +121,11 @@ export function ProductEntryForm({ existingProducts }: Props) {
                                 </Select>
                             </div>
 
-                            {/* Ref. Proveedor */}
                             <div className="md:col-span-2 space-y-1.5">
                                 <Label className="text-xs text-zinc-500">Ref. Prov. (Opcional)</Label>
                                 <Input name="shortCode" placeholder="Ej: FAC-123" className="bg-zinc-50/50" />
                             </div>
 
-                            {/* Min Stock */}
                             <div className="md:col-span-1 space-y-1.5">
                                 <Label className="text-xs text-red-500 font-medium">Min.</Label>
                                 <Input name="minStock" type="number" defaultValue="5" className="bg-red-50/50 border-red-100 text-red-900" />
@@ -135,8 +136,6 @@ export function ProductEntryForm({ existingProducts }: Props) {
                     {/* CASO 2: VINCULAR */}
                     <TabsContent value="link" className="mt-0">
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                            
-                            {/* Buscador */}
                             <div className="md:col-span-6 space-y-1.5">
                                 <Label className="text-xs text-blue-600 font-bold flex items-center gap-1">
                                     <LinkIcon size={12}/> Buscar Producto a Vincular
@@ -148,7 +147,6 @@ export function ProductEntryForm({ existingProducts }: Props) {
                                 />
                             </div>
 
-                            {/* Nueva Ref */}
                             <div className="md:col-span-4 space-y-1.5">
                                 <Label className="text-xs text-zinc-500">Nueva Ref. Proveedor (Opcional)</Label>
                                 <Input name="shortCode" placeholder="Si es un código nuevo..." className="bg-zinc-50/50" />
@@ -161,7 +159,6 @@ export function ProductEntryForm({ existingProducts }: Props) {
                     </TabsContent>
                 </div>
 
-                {/* --- ÁREA COMÚN (CANTIDAD Y BOTÓN) --- */}
                 <div className="flex items-end gap-3 w-full lg:w-auto border-t lg:border-t-0 lg:border-l border-zinc-100 pt-4 lg:pt-0 lg:pl-6">
                     <div className="space-y-1.5 w-24">
                         <Label className="text-xs text-zinc-500 font-bold">Cantidad</Label>

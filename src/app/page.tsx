@@ -11,7 +11,6 @@ export const dynamic = 'force-dynamic'
 export default async function DashboardPage() {
   const [statsRes] = await Promise.all([
     getDashboardStats(),
-    // Ya no necesitamos cargar productos/empleados aquí porque quitamos los botones
   ])
 
   const stats = statsRes.data || {
@@ -34,17 +33,15 @@ export default async function DashboardPage() {
     <main className="min-h-screen bg-gray-50/30 p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* --- HEADER (Solo Bienvenida) --- */}
+        {/* --- HEADER --- */}
         <div className="flex flex-col md:flex-row justify-between items-end gap-4 pb-2">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight text-[#444444]">Dashboard</h1>
-                {/* MENSAJE DE BIENVENIDA */}
                 <p className="text-[#444444]/60 mt-1 font-medium text-sm">
                     Bienvenido de nuevo, aquí tienes el resumen de hoy.
                 </p>
             </div>
             
-            {/* Solo Fecha */}
             <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm text-sm text-[#444444] font-semibold border border-gray-100">
                 <CalendarDays size={16} className="text-[#444444]"/>
                 {formattedDate}
@@ -54,8 +51,8 @@ export default async function DashboardPage() {
         {/* --- TARJETAS DE MÉTRICAS --- */}
         <div className="grid gap-4 md:grid-cols-3">
           
-          {/* 1. TOTAL STOCK */}
-          <Card className="bg-[#444444] border-none shadow-md text-white py-4 gap-2">
+          {/* 1. TOTAL STOCK (COLOR ACTUALIZADO: #de2d2d) */}
+          <Card className="bg-[#de2d2d] border-none shadow-md text-white py-4 gap-2">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-5">
               <CardTitle className="text-sm font-semibold text-white/90">
                 Total Stock
@@ -121,13 +118,11 @@ export default async function DashboardPage() {
                     <CardDescription className="text-[#444444]/50 text-xs">Salidas de material (7 días)</CardDescription>
                 </CardHeader>
                 <CardContent className="pl-0 px-6">
-                    {/* Renderizamos el componente puro */}
                     <DashboardCharts data={stats.chartData} />
                 </CardContent>
             </Card>
 
             {/* LISTA RECIENTE */}
-            {/* AGREGADO: 'gap-0' para quitar el espacio grande entre Header y Content */}
             <Card className="col-span-full md:col-span-3 border-none shadow-sm bg-white flex flex-col h-full max-h-[450px] gap-0">
                 <CardHeader className="border-b border-gray-50 py-4 bg-white px-6">
                     <div className="flex items-center justify-between">

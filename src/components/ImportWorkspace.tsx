@@ -36,22 +36,21 @@ export function ImportWorkspace({ existingProducts }: Props) {
         id: index,
         originalCode: item.noIdentificacion,
         originalDesc: item.descripcion,
+        // CORRECCIÓN 1: Capturamos el proveedor del XML (o ponemos uno default)
+        originalProvider: item.providerName || "Proveedor General", 
         quantity: item.cantidad,
         
         // Acción por defecto: CREAR (para decisión manual)
         action: 'create',
         linkedProductId: item.suggestedProduct?.id || "",
         
-        // CAMBIO 1: Código vacío por defecto (para generar QR o escanear manual)
+        // Datos nuevos
         newCode: '', 
-        
-        // Guardamos la clave del proveedor en ShortCode como referencia
         newShortCode: item.noIdentificacion, 
-        
         newDesc: item.descripcion,
         newCategory: 'Consumible',
         
-        // CAMBIO 2: Stock Mínimo por defecto
+        // Stock Mínimo por defecto
         newMinStock: 5 
       }))
       setImportItems(preparedItems)
@@ -99,20 +98,19 @@ export function ImportWorkspace({ existingProducts }: Props) {
         return
     }
 
-    // A. Validar Vínculos (Ya lo tenías)
+    // A. Validar Vínculos
     const invalidLinks = itemsToProcess.find(i => i.action === 'link' && !i.linkedProductId)
     if (invalidLinks) {
         alert("Hay productos marcados para 'Vincular' sin producto seleccionado.")
         return
     }
 
-    // B. NUEVO: Validar Códigos QR Vacíos
-    // Buscamos si hay algún producto para CREAR que no tenga código escrito
+    // B. Validar Códigos QR Vacíos
     const emptyCodes = itemsToProcess.find(i => i.action === 'create' && !i.newCode?.trim())
     
     if (emptyCodes) {
         alert("⚠️ Faltan Códigos QR\n\nNo podemos guardar productos sin identificación. Por favor, escribe un código manual o usa el botón 'Códigos Mágicos' para generarlos automáticamente.")
-        return // <--- DETIENE EL PROCESO AQUÍ
+        return 
     }
 
     setLoading(true)
@@ -124,7 +122,9 @@ export function ImportWorkspace({ existingProducts }: Props) {
         description: item.newDesc,
         category: item.newCategory,
         shortCode: item.newShortCode,
-        minStock: parseInt(item.newMinStock) 
+        minStock: parseInt(item.newMinStock),
+        // CORRECCIÓN 2: Enviamos el nombre del proveedor para guardarlo en la BD
+        providerName: item.originalProvider 
     }))
 
     const result = await processXmlImport(payload)
@@ -134,7 +134,6 @@ export function ImportWorkspace({ existingProducts }: Props) {
         router.push("/inventory")
         router.refresh()
     } else {
-        // Este alert saldrá si el servidor detecta que el código YA EXISTE en la base de datos
         alert("Error al guardar: " + result.error)
     }
   }
@@ -228,7 +227,14 @@ export function ImportWorkspace({ existingProducts }: Props) {
                                 <div className={`font-medium ${isIgnored ? 'text-zinc-400 line-through' : 'text-zinc-900'}`}>
                                     {item.originalDesc}
                                 </div>
-                                <div className="text-xs text-zinc-500 font-mono mt-1">Prov: {item.originalCode}</div>
+                                {/* CORRECCIÓN 3: Mostramos visualmente el proveedor detectado */}
+                                <div className="text-xs text-zinc-500 font-mono mt-1">
+                                    <span className="font-bold text-zinc-400 mr-1">PROV:</span>
+                                    {item.originalProvider}
+                                </div>
+                                <div className="text-xs text-zinc-400 font-mono mt-0.5">
+                                    Clave: {item.originalCode}
+                                </div>
                                 <Badge variant="secondary" className="mt-2 text-zinc-600">
                                     + {item.quantity} pzas
                                 </Badge>
@@ -267,19 +273,18 @@ export function ImportWorkspace({ existingProducts }: Props) {
                                             />
                                         </div>
 
-                                        {/* CÓDIGO (VACÍO POR DEFECTO) */}
+                                        {/* CÓDIGO QR */}
                                         <div className="md:col-span-4">
                                             <label className="text-[10px] uppercase font-bold text-zinc-400">Código (QR)</label>
                                             <Input 
                                                 value={item.newCode} 
                                                 onChange={(e) => updateItem(item.id, 'newCode', e.target.value)}
                                                 placeholder="Generar o Escanear"
-                                                // Si está vacío, le ponemos borde rojo, si tiene texto, borde normal
                                                 className={`h-8 text-xs bg-white font-mono ${!item.newCode ? "border-red-300 focus:border-red-500 bg-red-50/50" : "border-zinc-300"}`}
                                             />
                                         </div>
 
-                                        {/* CLAVE CORTA (VIENE DEL XML) */}
+                                        {/* CLAVE CORTA (PROV) */}
                                         <div className="md:col-span-3">
                                             <label className="text-[10px] uppercase font-bold text-zinc-400">Clave Prov.</label>
                                             <Input 
@@ -303,7 +308,7 @@ export function ImportWorkspace({ existingProducts }: Props) {
                                             </select>
                                         </div>
 
-                                        {/* STOCK MÍNIMO (NUEVO) */}
+                                        {/* STOCK MÍNIMO */}
                                         <div className="md:col-span-2">
                                             <label className="text-[10px] uppercase font-bold text-red-400 flex items-center gap-1">
                                                 Min <AlertTriangle size={10} />
@@ -322,7 +327,7 @@ export function ImportWorkspace({ existingProducts }: Props) {
                                             <LinkIcon size={10} /> Vincular a Stock Existente
                                         </label>
 
-                                        {/* AQUÍ ESTÁ EL BUSCADOR INTELIGENTE */}
+                                        {/* BUSCADOR INTELIGENTE */}
                                         <SearchableProductSelect 
                                             products={existingProducts}
                                             value={item.linkedProductId.toString()}
