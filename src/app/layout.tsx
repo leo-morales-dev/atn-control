@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { Source_Sans_3 } from "next/font/google"; // <--- CAMBIO DE FUENTE
+import { Source_Sans_3 } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { ContentWrapper } from "@/components/ContentWrapper";
 import { SessionGuard } from "@/components/SessionGuard";
-import { Toaster } from "sonner";
+import { Toaster } from "sonner"; // Importamos el componente de alertas
 
-// Configuramos la fuente Source Sans Pro (Source Sans 3 en Google Fonts)
 const sourceSans = Source_Sans_3({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -28,7 +27,13 @@ export default function RootLayout({
           <Sidebar />
           <ContentWrapper>
             {children}
-            <Toaster />
+            {/* CONFIGURACIÓN DE ALERTAS ACTUALIZADA */}
+            <Toaster 
+                position="top-right"   // <-- Aquí movemos las alertas arriba
+                richColors             // <-- Colores estilo tarjeta (Rojo/Verde)
+                closeButton            // <-- Botón de cerrar
+                expand={true}          // <-- Evita que se apilen demasiado
+            />
           </ContentWrapper>
         </div>
       </body>

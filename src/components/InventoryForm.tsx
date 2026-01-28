@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
+import { useRouter } from "next/navigation" 
 import { Wand2, Loader2, AlertTriangle, Link as LinkIcon, FileUp, PackagePlus } from "lucide-react" 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +13,6 @@ import { createOrUpdateProduct } from "@/app/actions/product"
 import { SearchableProductSelect } from "@/components/SearchableProductSelect"
 import { toast } from "sonner"
 import { ExcelImport } from "@/components/ExcelImport"
-import Link from "next/link"
 
 interface Product {
   id: number
@@ -25,11 +25,21 @@ interface Props {
 }
 
 export function InventoryForm({ productsList = [] }: Props) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("create") 
   const [category, setCategory] = useState("Herramienta")
   const [selectedProductId, setSelectedProductId] = useState("")
   const formRef = useRef<HTMLFormElement>(null)
+
+  // --- HANDLERS DE SANITIZACIÓN ---
+  const handleNumberInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+  }
+
+  const handleCodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.target.value = e.target.value.toUpperCase().replace(/\s/g, '');
+  }
 
   const generateCode = () => {
     const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase()
@@ -44,36 +54,84 @@ export function InventoryForm({ productsList = [] }: Props) {
     setLoading(true)
     formData.append("mode", activeTab)
     
-    if (activeTab === "link") {
-        if (!selectedProductId) {
-            toast.error("Selecciona un producto")
-            setLoading(false)
-            return
+    // --- VALIDACIONES DE SEGURIDAD ---
+
+    if (activeTab === "create") {
+        const code = formData.get("code") as string;
+        const shortCode = formData.get("shortCode") as string;
+        const description = formData.get("description") as string;
+
+        // 1. Validar Código Duplicado
+        const exists = productsList.some(p => p.code.toUpperCase() === code.toUpperCase().trim());
+        if (exists) {
+            toast.error("Código Duplicado", { 
+                description: `El código '${code}' ya pertenece a otro producto. Usa un código único o 'Sumar a Existente'.` 
+            });
+            setLoading(false);
+            return;
         }
-        formData.append("linkedProductId", selectedProductId)
-    } else {
+
+        // 2. Validar Campos Obligatorios
+        if (!shortCode.trim()) {
+            toast.error("Falta Referencia de Proveedor", { 
+                description: "La clave del proveedor es obligatoria." 
+            });
+            setLoading(false);
+            return;
+        }
+
+        if (!description.trim()) {
+             toast.error("Falta Descripción", { description: "Escribe el nombre del producto." });
+             setLoading(false);
+             return;
+        }
+
         formData.append("category", category)
     }
 
+    if (activeTab === "link") {
+        const shortCode = formData.get("shortCode") as string;
+
+        // 1. Validar Selección de Producto
+        if (!selectedProductId) {
+            toast.error("Selección Requerida", { description: "Debes buscar y seleccionar un producto para sumarle stock." })
+            setLoading(false)
+            return
+        }
+
+        // 2. Validar Referencia de Proveedor (AHORA OBLIGATORIA)
+        if (!shortCode.trim()) {
+            toast.error("Falta Referencia de Proveedor", { 
+                description: "Ingresa la clave del proveedor de este nuevo ingreso." 
+            });
+            setLoading(false)
+            return
+        }
+
+        formData.append("linkedProductId", selectedProductId)
+    }
+
+    // --- PROCESAR ---
     const result = await createOrUpdateProduct(formData)
     setLoading(false)
 
     if (result.success) {
-      toast.success(activeTab === "create" ? "Registrado" : "Stock actualizado")
+      toast.success(activeTab === "create" ? "Producto Registrado" : "Stock Actualizado", {
+          description: "La operación se completó exitosamente."
+      })
       formRef.current?.reset()
       setSelectedProductId("")
+      router.refresh()
     } else {
-      toast.error(result.error)
+      toast.error("Error del Servidor", { description: result.error })
     }
   }
 
   return (
     <Card className="mb-6 border-zinc-200 shadow-sm bg-white overflow-hidden">
       
-      {/* HEADER CON TÍTULO GRANDE Y BOTONES NEGROS */}
+      {/* HEADER */}
       <CardHeader className="py-3 px-5 border-b border-zinc-100 bg-zinc-50/50 flex flex-row items-center justify-between">
-        
-        {/* TÍTULO AUMENTADO */}
         <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-lg bg-[#232323] flex items-center justify-center shadow-sm">
                 <PackagePlus className="text-white" size={18} />
@@ -81,19 +139,14 @@ export function InventoryForm({ productsList = [] }: Props) {
             <span className="font-bold text-xl text-[#232323]">Nuevo Ingreso</span>
         </div>
         
-        {/* BOTONES DE IMPORTACIÓN NEGROS */}
         <div className="flex items-center gap-3">
-            {/* El componente ExcelImport ya tiene el botón negro configurado */}
+            <Button 
+                onClick={() => router.push('/inventory/import')}
+                className="h-10 w-[140px] gap-2 bg-[#de2d2d] text-white hover:bg-[#de2d2d]/90 shadow-sm px-3 font-medium border-none text-xs"
+            >
+                <FileUp size={16} /> Importar XML
+            </Button>
             <ExcelImport /> 
-            
-            <Link href="/inventory/import">
-                <Button 
-                    size="sm" 
-                    className="h-9 text-xs gap-2 bg-[#232323] text-white hover:bg-[#232323]/90 shadow-sm px-4 font-medium"
-                >
-                    <FileUp size={14} /> Importar XML
-                </Button>
-            </Link>
         </div>
       </CardHeader>
       
@@ -122,7 +175,13 @@ export function InventoryForm({ productsList = [] }: Props) {
                         <div className="col-span-12 md:col-span-3 space-y-1.5">
                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Código / QR</Label>
                             <div className="flex gap-1">
-                                <Input name="code" placeholder="Escanear..." required={activeTab === 'create'} className="h-10 text-sm bg-zinc-50 border-zinc-200 focus:bg-white transition-all" />
+                                <Input 
+                                    name="code" 
+                                    placeholder="Ej: PROD-8FL1Y9" 
+                                    required={activeTab === 'create'} 
+                                    onChange={handleCodeInput} 
+                                    className="h-10 text-sm bg-zinc-50 border-zinc-200 focus:bg-white transition-all uppercase font-mono" 
+                                />
                                 <Button type="button" variant="outline" size="icon" onClick={generateCode} className="h-10 w-10 shrink-0 text-zinc-400 hover:text-[#232323] border-zinc-200">
                                     <Wand2 size={16} />
                                 </Button>
@@ -131,7 +190,12 @@ export function InventoryForm({ productsList = [] }: Props) {
 
                         <div className="col-span-12 md:col-span-6 space-y-1.5">
                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Descripción</Label>
-                            <Input name="description" placeholder="Ej: Taladro Percutor Inalámbrico..." required={activeTab === 'create'} className="h-10 text-sm bg-zinc-50 border-zinc-200 focus:bg-white transition-all" />
+                            <Input 
+                                name="description" 
+                                placeholder="Ej: Taladro Percutor Inalámbrico..." 
+                                required={activeTab === 'create'} 
+                                className="h-10 text-sm bg-zinc-50 border-zinc-200 focus:bg-white transition-all" 
+                            />
                         </div>
 
                         <div className="col-span-12 md:col-span-3 space-y-1.5">
@@ -147,20 +211,39 @@ export function InventoryForm({ productsList = [] }: Props) {
                         </div>
 
                         <div className="col-span-12 md:col-span-3 space-y-1.5">
-                            <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Ref. Prov (Opcional)</Label>
-                            <Input name="shortCode" placeholder="Ej: FAC-123" className="h-10 text-sm bg-zinc-50 border-zinc-200" />
+                            <Label className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">Ref. Prov (Obligatorio)</Label>
+                            <Input 
+                                name="shortCode" 
+                                placeholder="Ej: FAC-123" 
+                                className="h-10 text-sm bg-blue-50/50 border-blue-100 focus:border-blue-300 font-mono text-blue-800" 
+                            />
                         </div>
 
                         <div className="col-span-6 md:col-span-2 space-y-1.5">
                             <Label className="text-[10px] font-bold text-red-600 uppercase tracking-wide flex items-center gap-1">
                                 Min <AlertTriangle size={12}/>
                             </Label>
-                            <Input name="minStock" type="number" defaultValue="5" className="h-10 text-sm text-center bg-red-50 border-red-200 text-red-700 font-bold focus:ring-red-200" />
+                            <Input 
+                                name="minStock" 
+                                type="text" 
+                                inputMode="numeric"
+                                defaultValue="5" 
+                                onChange={handleNumberInput} 
+                                className="h-10 text-sm text-center bg-red-50 border-red-200 text-red-700 font-bold focus:ring-red-200" 
+                            />
                         </div>
 
                          <div className="col-span-6 md:col-span-2 space-y-1.5">
                             <Label className="text-[10px] font-bold text-[#232323] uppercase tracking-wide">Cant.</Label>
-                            <Input name="quantity" type="number" defaultValue="1" min="1" required className="h-10 text-base font-bold text-center border-zinc-300 focus:border-[#232323]" />
+                            <Input 
+                                name="quantity" 
+                                type="text" 
+                                inputMode="numeric"
+                                defaultValue="1" 
+                                onChange={handleNumberInput} 
+                                required 
+                                className="h-10 text-base font-bold text-center border-zinc-300 focus:border-[#232323]" 
+                            />
                         </div>
 
                         <div className="col-span-12 md:col-span-5">
@@ -181,14 +264,27 @@ export function InventoryForm({ productsList = [] }: Props) {
                             <SearchableProductSelect products={productsList} value={selectedProductId} onChange={setSelectedProductId} />
                         </div>
 
+                        {/* CAMBIO: ETIQUETA OBLIGATORIA */}
                         <div className="col-span-12 md:col-span-3 space-y-1.5">
-                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Ref. Prov (Opcional)</Label>
-                             <Input name="shortCode" placeholder="Nueva clave..." className="h-10 text-sm bg-zinc-50 border-zinc-200" />
+                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Ref. Prov (Obligatorio)</Label>
+                             <Input 
+                                name="shortCode" 
+                                placeholder="Clave del proveedor..." 
+                                className="h-10 text-sm bg-zinc-50 border-zinc-200 font-mono" 
+                             />
                         </div>
 
                         <div className="col-span-4 md:col-span-1 space-y-1.5">
                             <Label className="text-[10px] font-bold text-[#232323] uppercase tracking-wide">Cant.</Label>
-                            <Input name="quantity" type="number" defaultValue="1" min="1" required className="h-10 text-base font-bold text-center border-zinc-300 focus:border-[#232323]" />
+                            <Input 
+                                name="quantity" 
+                                type="text" 
+                                inputMode="numeric"
+                                defaultValue="1" 
+                                onChange={handleNumberInput} 
+                                required 
+                                className="h-10 text-base font-bold text-center border-zinc-300 focus:border-[#232323]" 
+                            />
                         </div>
 
                         <div className="col-span-8 md:col-span-2">

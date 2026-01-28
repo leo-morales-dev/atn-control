@@ -139,3 +139,19 @@ model SupplierCode {
   productId Int
   product   Product @relation(fields: [productId], references: [id])
 }
+
+// Historial Universal del Sistema
+model SystemLog {
+  id          Int      @id @default(autoincrement())
+  action      String   // Ej: "INGRESO_XML", "PRESTAMO", "BAJA", "CREACION"
+  module      String   // Ej: "INVENTARIO", "EMPLEADOS", "SISTEMA"
+  description String   // Ej: "Se importaron 15 productos desde factura F-355"
+  details     String?  // Detalles técnicos opcionales (JSON stringified o texto extra)
+  user        String?  // Quién lo hizo (opcional por ahora)
+  timestamp   DateTime @default(now())
+
+  // Índices para búsqueda rápida
+  @@index([action])
+  @@index([module])
+  @@index([timestamp])
+}

@@ -10,10 +10,10 @@ export interface XmlItem {
   cantidad: number
   valorUnitario: number
   unidad?: string
-  providerName?: string // <--- Nuevo: Guardaremos el nombre del proveedor
+  providerName?: string 
 }
 
-// 1. LEER XML (Ahora extrae el Proveedor)
+// 1. LEER XML (Sin cambios)
 export async function parseFacturaXML(formData: FormData) {
   const file = formData.get('xml') as File
   if (!file) return { success: false, error: "No se subió archivo" }
@@ -23,7 +23,6 @@ export async function parseFacturaXML(formData: FormData) {
     const result = await parseStringPromise(text)
     
     const comprobante = result['cfdi:Comprobante']
-    // Extraemos el nombre del emisor (Proveedor) del XML
     const emisorData = comprobante['cfdi:Emisor']?.[0]?.['$']
     const providerName = emisorData?.Nombre || "Proveedor Desconocido"
 
@@ -38,7 +37,7 @@ export async function parseFacturaXML(formData: FormData) {
         cantidad: parseFloat(attrs.Cantidad),
         valorUnitario: parseFloat(attrs.ValorUnitario),
         unidad: attrs.Unidad || attrs.ClaveUnidad,
-        providerName: providerName // Pasamos el proveedor a cada item
+        providerName: providerName
       })
     }
 
@@ -47,7 +46,6 @@ export async function parseFacturaXML(formData: FormData) {
         where: {
             OR: [
                 { code: item.noIdentificacion },
-                // Buscamos también en la nueva tabla de claves
                 { supplierCodes: { some: { code: item.noIdentificacion } } } 
             ]
         }
@@ -64,18 +62,18 @@ export async function parseFacturaXML(formData: FormData) {
   }
 }
 
-// 2. GUARDAR DATOS (Lógica corregida para SupplierCode)
+// 2. GUARDAR DATOS (Con Historial Detallado por Ítem)
 export async function processXmlImport(items: any[]) {
   try {
     await prisma.$transaction(async (tx) => {
       for (const item of items) {
         
-        // Clave del proveedor actual en el XML
         const newCode = item.shortCode || item.code
         const provider = item.providerName || "Proveedor General"
+        let logDescription = ""
 
         if (item.action === 'create') {
-          // --- CASO 1: CREAR ---
+          // --- CREAR ---
           await tx.product.create({
             data: {
               code: item.code,
@@ -84,7 +82,6 @@ export async function processXmlImport(items: any[]) {
               stock: item.quantity,
               minStock: item.minStock || 5,
               shortCode: newCode, 
-              // AQUÍ ESTÁ LA MAGIA: Creamos la relación inicial
               supplierCodes: {
                 create: {
                     code: newCode,
@@ -93,31 +90,23 @@ export async function processXmlImport(items: any[]) {
               }
             }
           })
+          
+          logDescription = `Alta Nueva (XML): ${item.description}`
 
         } else if (item.action === 'link' && item.linkedProductId) {
-          // --- CASO 2: VINCULAR ---
+          // --- VINCULAR ---
           const prodId = item.linkedProductId
           
-          // A. Verificar si esta clave ya existe para este producto
           const existingKey = await tx.supplierCode.findFirst({
-              where: { 
-                  productId: prodId,
-                  code: newCode
-              }
+              where: { productId: prodId, code: newCode }
           })
 
-          // B. Si no existe, la creamos en la tabla SupplierCode
           if (!existingKey && newCode) {
               await tx.supplierCode.create({
-                  data: {
-                      productId: prodId,
-                      code: newCode,
-                      provider: provider
-                  }
+                  data: { productId: prodId, code: newCode, provider: provider }
               })
           }
 
-          // C. Actualizar Stock y Texto "shortCode" (para búsqueda rápida visual)
           const currentProd = await tx.product.findUnique({ where: { id: prodId } })
           if (currentProd) {
              let updatedShortCode = currentProd.shortCode || ""
@@ -132,7 +121,22 @@ export async function processXmlImport(items: any[]) {
                   shortCode: updatedShortCode
                 }
              })
+             
+             logDescription = `Sumado a Stock (XML): ${currentProd.description}`
           }
+        }
+
+        // --- REGISTRO INDIVIDUAL EN HISTORIAL ---
+        // Esto crea un renglón en la tabla SystemLog por CADA producto del bucle
+        if (logDescription) {
+            await tx.systemLog.create({
+                data: {
+                    action: "INGRESO XML",
+                    module: "INVENTARIO",
+                    description: logDescription,
+                    details: `Cant: +${item.quantity} | Código: ${newCode} | Prov: ${provider}`
+                }
+            })
         }
       }
     })

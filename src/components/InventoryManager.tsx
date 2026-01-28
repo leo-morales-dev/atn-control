@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation" // <--- Importamos Router
+import { useRouter } from "next/navigation" 
 import { Product } from "@prisma/client"
-import { Printer, AlertTriangle, CheckSquare, Square, Filter, XCircle, Bell, BellOff, RotateCcw } from "lucide-react"
+import { Printer, AlertTriangle, CheckSquare, Square, Filter, XCircle, Bell, BellOff, RotateCcw, QrCode } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,17 +20,15 @@ import {
 
 interface Props {
   products: Product[]
-  initialLowStock?: Product[] // <--- Nueva prop opcional
+  initialLowStock?: Product[] 
 }
 
 export function InventoryManager({ products, initialLowStock = [] }: Props) {
-  const router = useRouter() // <--- Hook de navegación
+  const router = useRouter() 
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [filterMode, setFilterMode] = useState<'all' | 'low'>('all')
   const [alertSnoozedUntil, setAlertSnoozedUntil] = useState<number | null>(null)
 
-  // Decidimos qué lista vigila la alerta:
-  // Si nos pasaron 'initialLowStock' (Global), usamos esa. Si no, usamos 'products' (Local).
   const alertProducts = initialLowStock.length > 0 ? initialLowStock : products
 
   useEffect(() => {
@@ -73,10 +71,8 @@ export function InventoryManager({ products, initialLowStock = [] }: Props) {
   return (
     <div>
         <LowStockAlert 
-            products={alertProducts} // <--- Usamos la lista GLOBAL
+            products={alertProducts} 
             onReview={() => {
-                // Al revisar, forzamos ir a la vista de "Stock Bajo" real
-                // para asegurarnos de que el usuario vea los items, aunque esté en otra categoría.
                 router.push('/inventory?filter=low_stock')
             }} 
             onSnoozeChange={checkSnoozeStatus} 
@@ -180,6 +176,9 @@ export function InventoryManager({ products, initialLowStock = [] }: Props) {
                         </Button>
                     </TableHead>
 
+                    {/* NUEVA COLUMNA: CÓDIGO QR */}
+                    <TableHead className="w-[140px]">Código QR</TableHead>
+
                     <TableHead className="w-[180px]">Ref. Proveedor</TableHead>
                     <TableHead>Descripción</TableHead>
                     <TableHead className="text-center w-[120px]">Categoría</TableHead>
@@ -190,7 +189,7 @@ export function InventoryManager({ products, initialLowStock = [] }: Props) {
                 <TableBody>
                   {filteredProducts.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-32 text-center text-zinc-500">
+                      <TableCell colSpan={7} className="h-32 text-center text-zinc-500">
                         {filterMode === 'low' 
                             ? "¡Todo en orden! No hay productos con stock bajo en esta vista." 
                             : "Sin resultados."}
@@ -209,6 +208,14 @@ export function InventoryManager({ products, initialLowStock = [] }: Props) {
                                         ? <CheckSquare size={16} className="text-blue-600" /> 
                                         : <Square size={16} className="text-zinc-300" />
                                     }
+                                </div>
+                            </TableCell>
+
+                            {/* DATO DEL CÓDIGO */}
+                            <TableCell className="font-mono text-xs text-zinc-500">
+                                <div className="flex items-center gap-1.5">
+                                    <QrCode size={12} className="text-zinc-300" />
+                                    {product.code}
                                 </div>
                             </TableCell>
 

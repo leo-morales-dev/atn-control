@@ -2,7 +2,10 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { FileUp, Save, Link as LinkIcon, ArrowRight, Wand2, Trash2, Hammer, PaintBucket, RotateCcw, AlertTriangle } from "lucide-react"
+import { 
+    FileUp, Save, Link as LinkIcon, ArrowRight, Wand2, Trash2, 
+    Hammer, PaintBucket, RotateCcw, AlertTriangle, PlusCircle, Box 
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -10,9 +13,10 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { parseFacturaXML, processXmlImport } from "@/app/actions/import-xml"
 import { SearchableProductSelect } from "@/components/SearchableProductSelect"
+import { toast } from "sonner" 
 
 interface Props {
-  existingProducts: { id: number, description: string, code: string }[]
+  existingProducts: { id: number, description: string, code: string, stock?: number }[]
 }
 
 export function ImportWorkspace({ existingProducts }: Props) {
@@ -36,40 +40,34 @@ export function ImportWorkspace({ existingProducts }: Props) {
         id: index,
         originalCode: item.noIdentificacion,
         originalDesc: item.descripcion,
-        // CORRECCIÓN 1: Capturamos el proveedor del XML (o ponemos uno default)
         originalProvider: item.providerName || "Proveedor General", 
         quantity: item.cantidad,
-        
-        // Acción por defecto: CREAR (para decisión manual)
-        action: 'create',
+        action: 'create', // Por defecto
         linkedProductId: item.suggestedProduct?.id || "",
-        
-        // Datos nuevos
         newCode: '', 
         newShortCode: item.noIdentificacion, 
         newDesc: item.descripcion,
         newCategory: 'Consumible',
-        
-        // Stock Mínimo por defecto
         newMinStock: 5 
       }))
       setImportItems(preparedItems)
       setStep(2)
+      toast.success("Factura analizada correctamente")
     } else {
-      alert(result.error)
+      toast.error("Error al leer XML", { description: result.error })
     }
   }
 
   // --- 2. ACCIONES RÁPIDAS ---
+  
   const applyRandomCodes = () => {
     setImportItems(prev => prev.map(item => {
         if (item.action !== 'create') return item
-        // Generamos código solo si el campo está vacío (para no sobrescribir manuales)
         if (item.newCode) return item 
-        
         const randomCode = "PROD-" + Math.random().toString(36).substring(2, 8).toUpperCase()
         return { ...item, newCode: randomCode }
     }))
+    toast.info("Códigos generados para campos vacíos")
   }
 
   const applyCategoryToAll = (category: string) => {
@@ -79,38 +77,78 @@ export function ImportWorkspace({ existingProducts }: Props) {
     }))
   }
 
+  const applyActionToAll = (action: 'create' | 'link') => {
+    setImportItems(prev => prev.map(item => {
+        if (item.action === 'ignore') return item
+        return { ...item, action: action }
+    }))
+  }
+
   const toggleIgnore = (id: number) => {
     setImportItems(prev => prev.map(item => {
         if (item.id !== id) return item
         if (item.action === 'ignore') {
-             return { ...item, action: 'create' } // Al restaurar, vuelve a create
+             return { ...item, action: 'create' } 
         }
         return { ...item, action: 'ignore' }
     }))
   }
 
-  // --- 3. GUARDAR ---
+  // --- 3. GUARDAR Y VALIDAR (EL CEREBRO DE LA SEGURIDAD) ---
   async function handleFinalSave() {
     const itemsToProcess = importItems.filter(i => i.action !== 'ignore')
     
     if (itemsToProcess.length === 0) {
-        alert("No hay items para procesar.")
+        toast.warning("Nada que procesar", { description: "Todos los items están marcados como ignorar." })
         return
     }
 
-    // A. Validar Vínculos
-    const invalidLinks = itemsToProcess.find(i => i.action === 'link' && !i.linkedProductId)
+    // A. Validar Vínculos Vacíos (CORREGIDO: Validación Estricta)
+    // Buscamos items que sean 'link' Y que no tengan ID seleccionado (o sea 0 o vacío)
+    const invalidLinks = itemsToProcess.find(i => 
+        i.action === 'link' && (!i.linkedProductId || i.linkedProductId.toString() === "0" || i.linkedProductId === "")
+    )
+    
     if (invalidLinks) {
-        alert("Hay productos marcados para 'Vincular' sin producto seleccionado.")
+        toast.error("Faltan Selecciones en 'Vincular'", { 
+            description: "Has elegido 'Vincular Existente' en un producto pero no seleccionaste cuál. Por favor elige uno o cambia a 'Crear Nuevo'." 
+        })
         return
     }
 
     // B. Validar Códigos QR Vacíos
     const emptyCodes = itemsToProcess.find(i => i.action === 'create' && !i.newCode?.trim())
-    
     if (emptyCodes) {
-        alert("⚠️ Faltan Códigos QR\n\nNo podemos guardar productos sin identificación. Por favor, escribe un código manual o usa el botón 'Códigos Mágicos' para generarlos automáticamente.")
+        toast.error("Faltan Códigos QR", { 
+            description: "No se pueden crear productos sin código. Escríbelos o usa 'Códigos Mágicos'." 
+        })
         return 
+    }
+
+    // C. Validar Duplicados INTERNOS (En la misma lista)
+    const codesInBatch = itemsToProcess
+        .filter(i => i.action === 'create')
+        .map(i => i.newCode?.trim().toUpperCase());
+    
+    const uniqueCodes = new Set(codesInBatch);
+    if (uniqueCodes.size !== codesInBatch.length) {
+        toast.error("Códigos Duplicados en Lista", { 
+            description: "Estás intentando asignar el MISMO código a dos productos distintos en esta importación." 
+        })
+        return;
+    }
+
+    // D. Validar Duplicados EXTERNOS (En la Base de Datos)
+    const dbConflict = itemsToProcess.find(item => 
+        item.action === 'create' && 
+        existingProducts.some(ep => ep.code.toUpperCase() === item.newCode?.trim().toUpperCase())
+    );
+
+    if (dbConflict) {
+        toast.error("Código Ya Existe", { 
+            description: `El código '${dbConflict.newCode}' ya pertenece a otro producto en tu inventario. Cámbialo o usa 'Vincular'.` 
+        })
+        return;
     }
 
     setLoading(true)
@@ -123,7 +161,6 @@ export function ImportWorkspace({ existingProducts }: Props) {
         category: item.newCategory,
         shortCode: item.newShortCode,
         minStock: parseInt(item.newMinStock),
-        // CORRECCIÓN 2: Enviamos el nombre del proveedor para guardarlo en la BD
         providerName: item.originalProvider 
     }))
 
@@ -131,15 +168,37 @@ export function ImportWorkspace({ existingProducts }: Props) {
     setLoading(false)
 
     if (result.success) {
+        toast.success("Importación Exitosa", { description: "El inventario ha sido actualizado." })
         router.push("/inventory")
         router.refresh()
     } else {
-        alert("Error al guardar: " + result.error)
+        toast.error("Error al guardar", { description: result.error })
     }
   }
 
+  // --- CONTROL DE INPUTS (SANITIZACIÓN MEJORADA) ---
   const updateItem = (id: number, field: string, value: any) => {
+    
+    // 1. SOLO NÚMEROS POSITIVOS (Bloquea -, +, e, letras)
+    if (field === 'newMinStock' || field === 'quantity') {
+        // Reemplaza todo lo que NO sea un número del 0 al 9
+        const clean = value.toString().replace(/[^0-9]/g, '');
+        
+        // Si queda vacío, lo dejamos vacío (para permitir borrar). Si tiene números, parseamos.
+        value = clean === '' ? '' : parseInt(clean, 10);
+    }
+    
+    // 2. Códigos en Mayúsculas y sin espacios
+    if (field === 'newCode') {
+        value = value.toString().toUpperCase().replace(/\s/g, '');
+    }
+
     setImportItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item))
+  }
+
+  // Helper para encontrar info del producto vinculado
+  const getLinkedProductInfo = (id: string) => {
+      return existingProducts.find(p => p.id.toString() === id);
   }
 
   if (step === 1) {
@@ -171,35 +230,44 @@ export function ImportWorkspace({ existingProducts }: Props) {
     <div className="space-y-6">
         {/* BARRA DE ACCIONES RÁPIDAS */}
         <Card className="bg-white border-zinc-200 shadow-sm sticky top-4 z-20">
-            <CardContent className="p-4 flex flex-wrap items-center gap-4 justify-between">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-zinc-700 mr-2">Acciones Rápidas:</span>
+            <CardContent className="p-3 flex flex-col md:flex-row flex-wrap items-center gap-4 justify-between">
+                
+                {/* GRUPO IZQUIERDO */}
+                <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 scrollbar-hide">
+                    <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider mr-1 shrink-0">Lotes:</span>
                     
-                    <Button variant="outline" size="sm" onClick={applyRandomCodes} className="gap-2 h-8" title="Generar códigos solo para los vacíos">
-                        <Wand2 size={14} className="text-purple-600" />
-                        Códigos Mágicos
+                    <Button variant="outline" size="sm" onClick={() => applyActionToAll('create')} className="gap-1.5 h-7 text-xs bg-zinc-50 text-zinc-600 hover:text-green-700 hover:bg-green-50 hover:border-green-200">
+                        <PlusCircle size={12} /> Todo Crear
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => applyActionToAll('link')} className="gap-1.5 h-7 text-xs bg-zinc-50 text-zinc-600 hover:text-blue-700 hover:bg-blue-50 hover:border-blue-200">
+                        <LinkIcon size={12} /> Todo Vincular
                     </Button>
 
-                    <div className="h-4 w-px bg-zinc-200 mx-1" />
+                    <div className="h-4 w-px bg-zinc-200 mx-1 shrink-0" />
 
-                    <Button variant="outline" size="sm" onClick={() => applyCategoryToAll('Herramienta')} className="gap-2 h-8">
-                        <Hammer size={14} className="text-blue-600" />
-                        Todo Herramientas
+                    <Button variant="outline" size="sm" onClick={applyRandomCodes} className="gap-1.5 h-7 text-xs bg-zinc-50 text-zinc-600 hover:text-purple-700 hover:bg-purple-50 hover:border-purple-200">
+                        <Wand2 size={12} /> Códigos QR
+                    </Button>
+
+                    <div className="h-4 w-px bg-zinc-200 mx-1 shrink-0" />
+
+                    <Button variant="outline" size="sm" onClick={() => applyCategoryToAll('Herramienta')} className="gap-1.5 h-7 text-xs bg-zinc-50 text-zinc-600 hover:text-zinc-900">
+                        <Hammer size={12} /> Herramientas
                     </Button>
                     
-                    <Button variant="outline" size="sm" onClick={() => applyCategoryToAll('Consumible')} className="gap-2 h-8">
-                        <PaintBucket size={14} className="text-amber-600" />
-                        Todo Consumibles
+                    <Button variant="outline" size="sm" onClick={() => applyCategoryToAll('Consumible')} className="gap-1.5 h-7 text-xs bg-zinc-50 text-zinc-600 hover:text-zinc-900">
+                        <PaintBucket size={12} /> Consumibles
                     </Button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <Button variant="ghost" onClick={() => setStep(1)} className="text-zinc-500">
+                {/* GRUPO DERECHO */}
+                <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                    <Button variant="ghost" onClick={() => setStep(1)} className="text-zinc-500 h-8 text-xs">
                         Cancelar
                     </Button>
-                    <Button onClick={handleFinalSave} disabled={loading} className="bg-zinc-900 text-white shadow-md hover:bg-zinc-800">
-                        <Save size={16} className="mr-2" />
-                        {loading ? "Guardando..." : `Importar ${importItems.filter(i => i.action !== 'ignore').length} Productos`}
+                    <Button onClick={handleFinalSave} disabled={loading} className="bg-[#de2d2d] text-white shadow-md hover:bg-[#de2d2d]/90 h-8 text-xs font-bold px-4">
+                        <Save size={14} className="mr-2" />
+                        {loading ? "Guardando..." : `Importar ${importItems.filter(i => i.action !== 'ignore').length} Ítems`}
                     </Button>
                 </div>
             </CardContent>
@@ -210,95 +278,117 @@ export function ImportWorkspace({ existingProducts }: Props) {
             <table className="w-full text-sm">
                 <thead className="bg-zinc-50 border-b border-zinc-100">
                     <tr>
-                        <th className="p-3 text-left w-1/4 font-medium text-zinc-500">Origen (XML)</th>
-                        <th className="p-3 text-center w-[140px] font-medium text-zinc-500">Acción</th>
-                        <th className="p-3 text-left font-medium text-zinc-500">Destino (Tu Sistema)</th>
+                        <th className="p-3 text-left w-[25%] font-medium text-zinc-500 pl-6">Producto en Factura</th>
+                        <th className="p-3 text-center w-[180px] font-medium text-zinc-500">Acción</th>
+                        <th className="p-3 text-left font-medium text-zinc-500">Configuración en Sistema</th>
                         <th className="p-3 w-10"></th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
                     {importItems.map((item) => {
-                        const isIgnored = item.action === 'ignore'
+                        const isIgnored = item.action === 'ignore';
+                        const linkedInfo = item.linkedProductId ? getLinkedProductInfo(item.linkedProductId) : null;
+
                         return (
-                        <tr key={item.id} className={`group transition-colors ${isIgnored ? 'bg-zinc-50 opacity-50' : 'hover:bg-blue-50/10'}`}>
+                        <tr key={item.id} className={`group transition-colors ${isIgnored ? 'bg-zinc-50/80 opacity-60' : 'hover:bg-zinc-50/50'}`}>
                             
                             {/* 1. XML INFO */}
-                            <td className="p-4 align-top">
-                                <div className={`font-medium ${isIgnored ? 'text-zinc-400 line-through' : 'text-zinc-900'}`}>
+                            <td className="p-4 align-top pl-6">
+                                <div className={`font-semibold text-sm ${isIgnored ? 'text-zinc-400 line-through' : 'text-zinc-800'}`}>
                                     {item.originalDesc}
                                 </div>
-                                {/* CORRECCIÓN 3: Mostramos visualmente el proveedor detectado */}
-                                <div className="text-xs text-zinc-500 font-mono mt-1">
-                                    <span className="font-bold text-zinc-400 mr-1">PROV:</span>
-                                    {item.originalProvider}
+                                <div className="flex flex-col gap-1 mt-1.5">
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-[10px] text-zinc-500 font-mono border-zinc-200 bg-white">
+                                            {item.originalCode}
+                                        </Badge>
+                                        <Badge variant="secondary" className="text-[10px] bg-zinc-100 text-zinc-600">
+                                            x {item.quantity}
+                                        </Badge>
+                                    </div>
+                                    <span className="text-[10px] text-zinc-400 truncate max-w-[200px]" title={item.originalProvider}>
+                                        {item.originalProvider}
+                                    </span>
                                 </div>
-                                <div className="text-xs text-zinc-400 font-mono mt-0.5">
-                                    Clave: {item.originalCode}
-                                </div>
-                                <Badge variant="secondary" className="mt-2 text-zinc-600">
-                                    + {item.quantity} pzas
-                                </Badge>
                             </td>
 
                             {/* 2. SELECTOR ACCIÓN */}
                             <td className="p-4 align-top">
-                                <div className="flex flex-col items-center gap-2">
-                                    <ArrowRight className={`rotate-90 md:rotate-0 ${isIgnored ? 'text-zinc-200' : 'text-blue-200'}`} />
-                                    <select
-                                        className="text-xs border rounded p-1.5 w-full bg-white font-medium"
-                                        value={item.action}
-                                        onChange={(e) => updateItem(item.id, 'action', e.target.value)}
+                                <div className="flex justify-center">
+                                    <Select 
+                                        value={item.action} 
+                                        onValueChange={(val) => updateItem(item.id, 'action', val)}
                                         disabled={isIgnored}
                                     >
-                                        <option value="create">Crear Nuevo</option>
-                                        <option value="link">Vincular</option>
-                                    </select>
+                                        <SelectTrigger className={`
+                                            h-8 w-[160px] text-xs font-medium border-zinc-200 shadow-sm transition-all
+                                            ${item.action === 'create' ? 'bg-green-50 text-green-700 border-green-200 hover:border-green-300' : ''}
+                                            ${item.action === 'link' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300' : ''}
+                                        `}>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="create" className="text-xs font-medium focus:bg-green-50 focus:text-green-700">
+                                                <div className="flex items-center gap-2">
+                                                    <PlusCircle size={14} /> Crear Nuevo
+                                                </div>
+                                            </SelectItem>
+                                            <SelectItem value="link" className="text-xs font-medium focus:bg-blue-50 focus:text-blue-700">
+                                                <div className="flex items-center gap-2">
+                                                    <LinkIcon size={14} /> Vincular Existente
+                                                </div>
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
+                                {!isIgnored && (
+                                    <div className="flex justify-center mt-2">
+                                        <ArrowRight className={`rotate-90 md:rotate-0 text-zinc-200`} size={16} />
+                                    </div>
+                                )}
                             </td>
 
                             {/* 3. FORMULARIO */}
                             <td className="p-4 align-top">
                                 {isIgnored ? (
-                                    <span className="text-xs italic text-zinc-400">Este producto será ignorado.</span>
+                                    <div className="h-full flex items-center justify-start text-zinc-400 text-xs italic bg-zinc-50/50 p-4 rounded-lg border border-zinc-100 border-dashed">
+                                        Producto ignorado. No se importará.
+                                    </div>
                                 ) : item.action === 'create' ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-zinc-50 p-3 rounded-lg border border-zinc-100">
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-white p-4 rounded-xl border border-zinc-200 shadow-sm transition-shadow hover:shadow-md">
                                         
-                                        {/* DESCRIPCIÓN */}
                                         <div className="md:col-span-12">
-                                            <label className="text-[10px] uppercase font-bold text-zinc-400">Descripción</label>
+                                            <label className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block">Descripción en Sistema</label>
                                             <Input 
                                                 value={item.newDesc} 
                                                 onChange={(e) => updateItem(item.id, 'newDesc', e.target.value)}
-                                                className="h-8 text-xs bg-white" 
+                                                className="h-8 text-xs bg-zinc-50/50 border-zinc-200 focus:bg-white transition-all" 
                                             />
                                         </div>
 
-                                        {/* CÓDIGO QR */}
                                         <div className="md:col-span-4">
-                                            <label className="text-[10px] uppercase font-bold text-zinc-400">Código (QR)</label>
+                                            <label className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block">Código (QR)</label>
                                             <Input 
                                                 value={item.newCode} 
                                                 onChange={(e) => updateItem(item.id, 'newCode', e.target.value)}
-                                                placeholder="Generar o Escanear"
-                                                className={`h-8 text-xs bg-white font-mono ${!item.newCode ? "border-red-300 focus:border-red-500 bg-red-50/50" : "border-zinc-300"}`}
+                                                placeholder="Generar..."
+                                                className={`h-8 text-xs font-mono transition-all ${!item.newCode ? "border-red-200 bg-red-50 focus:border-red-400" : "bg-zinc-50/50 border-zinc-200"}`}
                                             />
                                         </div>
 
-                                        {/* CLAVE CORTA (PROV) */}
                                         <div className="md:col-span-3">
-                                            <label className="text-[10px] uppercase font-bold text-zinc-400">Clave Prov.</label>
+                                            <label className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block">Clave Prov.</label>
                                             <Input 
                                                 value={item.newShortCode} 
                                                 onChange={(e) => updateItem(item.id, 'newShortCode', e.target.value)}
-                                                className="h-8 text-xs bg-white font-mono text-zinc-500" 
+                                                className="h-8 text-xs bg-zinc-50/50 border-zinc-200 font-mono text-zinc-600" 
                                             />
                                         </div>
 
-                                        {/* CATEGORÍA */}
                                         <div className="md:col-span-3">
-                                            <label className="text-[10px] uppercase font-bold text-zinc-400">Categoría</label>
+                                            <label className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block">Categoría</label>
                                             <select 
-                                                className="w-full h-8 text-xs border rounded bg-white px-2"
+                                                className="w-full h-8 text-xs border border-zinc-200 rounded-md bg-zinc-50/50 px-2 focus:ring-2 focus:ring-black/5 outline-none transition-all"
                                                 value={item.newCategory}
                                                 onChange={(e) => updateItem(item.id, 'newCategory', e.target.value)}
                                             >
@@ -308,46 +398,66 @@ export function ImportWorkspace({ existingProducts }: Props) {
                                             </select>
                                         </div>
 
-                                        {/* STOCK MÍNIMO */}
                                         <div className="md:col-span-2">
-                                            <label className="text-[10px] uppercase font-bold text-red-400 flex items-center gap-1">
+                                            <label className="text-[10px] uppercase font-bold text-red-400 flex items-center gap-1 mb-1">
                                                 Min <AlertTriangle size={10} />
                                             </label>
                                             <Input 
                                                 type="number"
                                                 value={item.newMinStock} 
                                                 onChange={(e) => updateItem(item.id, 'newMinStock', e.target.value)}
-                                                className="h-8 text-xs bg-red-50 border-red-100 text-center font-bold text-red-600 focus:border-red-300" 
+                                                className="h-8 text-xs bg-red-50/50 border-red-100 text-center font-bold text-red-600 focus:border-red-300" 
                                             />
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 shadow-sm">
-                                        <label className="text-[10px] uppercase font-bold text-blue-500 mb-1.5 block flex items-center gap-1">
-                                            <LinkIcon size={10} /> Vincular a Stock Existente
+                                    <div className="p-4 bg-blue-50/30 rounded-xl border border-blue-100 shadow-sm">
+                                        <label className="text-[10px] uppercase font-bold text-blue-600 mb-2 block flex items-center gap-1.5">
+                                            <LinkIcon size={12} /> Buscar Producto para Sumar Stock
                                         </label>
 
-                                        {/* BUSCADOR INTELIGENTE */}
-                                        <SearchableProductSelect 
-                                            products={existingProducts}
-                                            value={item.linkedProductId.toString()}
-                                            onChange={(val) => updateItem(item.id, 'linkedProductId', val)}
-                                        />
+                                        <div className="bg-white rounded-md border border-blue-100">
+                                            <SearchableProductSelect 
+                                                products={existingProducts}
+                                                value={item.linkedProductId.toString()}
+                                                onChange={(val) => updateItem(item.id, 'linkedProductId', val)}
+                                            />
+                                        </div>
 
-                                        <p className="text-[10px] text-zinc-400 mt-2 ml-1">
-                                            Se sumarán <b>{item.quantity}</b> unidades.
-                                        </p>
+                                        <div className="flex items-center justify-between mt-3 px-1">
+                                            <div className="flex items-center gap-2">
+                                                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-none shadow-none">
+                                                    + {item.quantity} unidades
+                                                </Badge>
+                                            </div>
+                                            
+                                            {linkedInfo && (
+                                                <div className="flex items-center gap-3 text-[10px] text-zinc-500 bg-white/60 px-2 py-1 rounded border border-blue-100">
+                                                    <span className="flex items-center gap-1">
+                                                        <Box size={10} className="text-zinc-400"/>
+                                                        Stock: <b>{linkedInfo.stock || 0}</b>
+                                                    </span>
+                                                    <span className="h-3 w-px bg-zinc-300"></span>
+                                                    <span className="font-mono text-zinc-600">{linkedInfo.code}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </td>
 
                             {/* 4. BOTÓN IGNORAR */}
-                            <td className="p-4 align-top text-right">
+                            <td className="p-4 align-top text-right pr-6">
                                 <Button 
                                     variant="ghost" 
                                     size="icon" 
                                     onClick={() => toggleIgnore(item.id)}
-                                    className={isIgnored ? "text-green-600 hover:text-green-700 bg-green-50" : "text-zinc-400 hover:text-red-500 hover:bg-red-50"}
+                                    className={`
+                                        h-8 w-8 transition-all duration-200
+                                        ${isIgnored 
+                                            ? "text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100" 
+                                            : "text-zinc-300 hover:text-red-500 hover:bg-red-50"}
+                                    `}
                                     title={isIgnored ? "Restaurar" : "Ignorar este producto"}
                                 >
                                     {isIgnored ? <RotateCcw size={16} /> : <Trash2 size={16} />}

@@ -11,13 +11,20 @@ import {
   ArrowRightLeft, 
   History, 
   AlertTriangle,
-  LogOut 
+  LogOut,
+  MoreVertical 
 } from "lucide-react"
 import { logout } from "@/app/actions/auth"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { SystemResetDialog } from "@/components/SystemResetDialog" // Importamos el diálogo de reinicio
 
 const menuItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Préstamos", href: "/loans", icon: ArrowRightLeft },
+  // { name: "Préstamos", href: "/loans", icon: ArrowRightLeft }, // Descomenta si usas esta página
   { name: "Inventario", href: "/inventory", icon: Package },
   { name: "Reportes", href: "/damages", icon: AlertTriangle },
   { name: "Empleados", href: "/employees", icon: Users },
@@ -52,11 +59,11 @@ export function Sidebar() {
   }
 
   return (
-    // CAMBIO: Fondo #ebebeb y borde eliminado o sutil
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-[#ebebeb] text-[#232323] flex flex-col shadow-inner">
+    // DISEÑO ORIGINAL: Fondo #ebebeb
+    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-[#ebebeb] text-[#232323] flex flex-col shadow-inner border-r border-white/50">
       
       {/* SECCIÓN DEL LOGO */}
-      <div className="flex h-20 items-center px-6 shrink-0">
+      <div className="flex h-20 items-center px-6 shrink-0 mt-2">
         <div className="relative h-10 w-full flex items-center justify-start">
              <Image 
                 src="/logo1.png" 
@@ -79,7 +86,6 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              // CAMBIO: Botón activo blanco, texto siempre oscuro (#232323)
               className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 ${
                 isActive 
                   ? "bg-white text-[#232323] shadow-sm translate-x-1" 
@@ -93,27 +99,49 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* SECCIÓN DE USUARIO CON POPOVER (MODIFICADA) */}
       <div className="p-6">
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/50 p-3 border border-white/20">
-            <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-[#444444] text-white flex items-center justify-center font-bold text-xs">
-                    AD
+        <Popover>
+            <PopoverTrigger asChild>
+                <div className="flex items-center justify-between gap-3 rounded-xl bg-white/50 p-3 border border-white/20 cursor-pointer hover:bg-white/80 transition-all group">
+                    <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-[#444444] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                            AD
+                        </div>
+                        <div className="text-sm">
+                            <p className="font-bold text-[#232323]">Admin</p>
+                            <p className="text-xs text-[#232323]/60">Conectado</p>
+                        </div>
+                    </div>
+                    
+                    <MoreVertical size={16} className="text-[#232323]/40 group-hover:text-[#232323] transition-colors"/>
                 </div>
-                <div className="text-sm">
-                    <p className="font-bold text-[#232323]">Admin</p>
-                    <p className="text-xs text-[#232323]/60">Conectado</p>
+            </PopoverTrigger>
+
+            <PopoverContent className="w-60 p-2 mb-2 ml-4 bg-white border-zinc-200 shadow-xl rounded-xl" side="right" align="end">
+                <div className="space-y-1">
+                    <div className="px-2 py-1.5 border-b border-zinc-100 mb-1">
+                        <p className="text-xs font-bold text-[#232323]">Opciones de Cuenta</p>
+                    </div>
+                    
+                    {/* Botón Cerrar Sesión */}
+                    <button 
+                        onClick={handleLogout}
+                        disabled={isLoggingOut}
+                        className="w-full flex items-center gap-2 px-2 py-2 text-sm text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors"
+                    >
+                        <LogOut size={16} /> Cerrar Sesión
+                    </button>
+
+                    <div className="h-px bg-zinc-100 my-1"></div>
+
+                    {/* Botón Peligroso: Reiniciar Sistema */}
+                    <div className="pt-1">
+                        <SystemResetDialog />
+                    </div>
                 </div>
-            </div>
-            
-            <button 
-                onClick={handleLogout}
-                className="text-[#232323]/40 hover:text-[#de2d2d] transition-colors p-1"
-                title="Cerrar Sesión"
-                disabled={isLoggingOut}
-            >
-                <LogOut size={18} />
-            </button>
-        </div>
+            </PopoverContent>
+        </Popover>
       </div>
     </aside>
   )

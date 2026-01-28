@@ -2,12 +2,13 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { logHistory } from "@/lib/logger"
 
-// 1. Obtener estadísticas (Ignorando archivados)
+// 1. Obtener estadísticas
 export async function getInventoryStats() {
   try {
     const products = await prisma.product.findMany({
-      where: { isArchived: false }, // <--- Solo activos
+      where: { isArchived: false },
       select: {
         category: true,
         stock: true,
@@ -29,11 +30,11 @@ export async function getInventoryStats() {
   }
 }
 
-// 2. Obtener productos (Filtrando archivados)
+// 2. Obtener productos
 export async function getProducts(query: string = "", filter: string = "all") {
   try {
     const where: any = {
-        isArchived: false, // <--- IMPORTANTE: Nunca mostrar los borrados
+        isArchived: false,
         OR: [
           { description: { contains: query } },
           { code: { contains: query } }
@@ -60,12 +61,11 @@ export async function getProducts(query: string = "", filter: string = "all") {
   }
 }
 
-// 3. NUEVO: Borrado Lógico (Archivar)
+// 3. Borrado Lógico Masivo
 export async function deleteProducts(filter: string = "all") {
   try {
-    let where: any = { isArchived: false } // Solo afectar a los que están vivos
+    let where: any = { isArchived: false }
 
-    // Definir a quién vamos a "borrar"
     if (filter === 'Herramienta' || filter === 'Consumible' || filter === 'EPP') {
       where.category = filter
     } else if (filter === 'low_stock') {
@@ -76,16 +76,13 @@ export async function deleteProducts(filter: string = "all") {
       where.id = { in: idsToDelete }
     }
 
-    // EN LUGAR DE DELETE, HACEMOS UPDATE
     await prisma.product.updateMany({
       where,
       data: {
-        isArchived: true, // Lo marcamos como borrado
-        stock: 0          // Ponemos stock en 0 para que no cuente
+        isArchived: true,
+        stock: 0
       }
     })
-
-    // NO borramos préstamos ni incidentes. El historial queda a salvo.
 
     revalidatePath("/inventory")
     revalidatePath("/")
@@ -96,34 +93,43 @@ export async function deleteProducts(filter: string = "all") {
   }
 }
 
-// ... Las funciones createProduct y updateProduct se quedan igual ...
-// (Asegúrate de dejarlas en el archivo como estaban)
-// Solo recuerda que al Crear, no necesitamos tocar isArchived (por defecto es false)
-
-export async function updateProduct(id: number, formData: FormData) {
+// 4. ACTUALIZAR PRODUCTO (CORREGIDA)
+export async function updateProduct(formData: FormData) {
+    // CORRECCIÓN: Leemos el ID desde el FormData
+    const id = parseInt(formData.get("id") as string)
     const code = formData.get("code") as string
     const description = formData.get("description") as string
     const category = formData.get("category") as string
-    const stockRaw = formData.get("stock") as string
     const minStockRaw = formData.get("minStock") as string
+    const shortCode = formData.get("shortCode") as string // Ref. Proveedor
     
-    const stock = stockRaw ? parseInt(stockRaw) : 0
     const minStock = minStockRaw ? parseInt(minStockRaw) : 5
   
-    if (!code || !description || !category) {
+    if (!id || !code || !description || !category) {
       return { success: false, error: "Faltan datos obligatorios" }
     }
   
     try {
       await prisma.product.update({
         where: { id },
-        data: { code, description, category, stock, minStock }
+        data: { 
+            code, 
+            description, 
+            category, 
+            minStock,
+            shortCode: shortCode || null
+            // NOTA: No actualizamos 'stock' aquí para evitar resetearlo a 0 accidentalmente
+        }
       })
       
       revalidatePath("/inventory")
       revalidatePath("/") 
       return { success: true }
-    } catch (error) {
+    } catch (error: any) {
+      // Detección de error de unicidad (P2002 en Prisma)
+      if (error.code === 'P2002') {
+          return { success: false, error: "Unique constraint violation" }
+      }
       return { success: false, error: "Error al actualizar." }
     }
 }
@@ -156,14 +162,13 @@ export async function createProduct(formData: FormData) {
     }
 }
 
-// NUEVA: Borrar un solo producto por ID (Borrado Lógico)
 export async function deleteProductById(id: number) {
   try {
     await prisma.product.update({
       where: { id },
       data: { 
-        isArchived: true, // Lo ocultamos
-        stock: 0          // Stock a 0 para que no cuente en sumas
+        isArchived: true, 
+        stock: 0          
       }
     })
     
@@ -175,7 +180,6 @@ export async function deleteProductById(id: number) {
   }
 }
 
-// --- FUNCIÓN A REEMPLAZAR ---
 export async function createOrUpdateProduct(data: FormData) {
   const mode = data.get("mode") as string 
   const quantity = parseInt(data.get("quantity") as string) || 0
@@ -220,12 +224,26 @@ export async function createOrUpdateProduct(data: FormData) {
         }
       })
 
+      // --- REGISTRAR HISTORIAL (Log) ---
+      await logHistory({
+        action: "INGRESO MANUAL (SUMA)",
+        module: "INVENTARIO",
+        description: `Se sumaron ${quantity} unidades a: ${currentProd.description}`,
+        details: `Código: ${currentProd.code} | Ref. Prov: ${providerKey || "N/A"}`
+      })
+
     } else {
       // --- CREAR NUEVO (Manual) ---
       const code = data.get("code") as string
       const description = data.get("description") as string
       const category = data.get("category") as string
       const minStock = parseInt(data.get("minStock") as string) || 5
+
+      // Validación extra de seguridad en servidor (por si acaso falla el cliente)
+      const checkExists = await prisma.product.findUnique({ where: { code } })
+      if (checkExists) {
+          return { success: false, error: "El código ya existe en el sistema." }
+      }
 
       await prisma.product.create({
         data: {
@@ -240,6 +258,14 @@ export async function createOrUpdateProduct(data: FormData) {
               create: providerKey ? [{ code: providerKey, provider: "Ingreso Manual" }] : []
           }
         }
+      })
+
+      // --- REGISTRAR HISTORIAL (Log) ---
+      await logHistory({
+        action: "INGRESO MANUAL (NUEVO)",
+        module: "INVENTARIO",
+        description: `Alta de producto nuevo: ${description}`,
+        details: `Código: ${code} | Stock Inicial: ${quantity} | Ref. Prov: ${providerKey || "N/A"}`
       })
     }
 

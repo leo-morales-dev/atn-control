@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
+import { useRouter } from "next/navigation" // Importamos useRouter
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,7 +11,6 @@ import { Link as LinkIcon, Wand2 } from "lucide-react"
 import { createOrUpdateProduct } from "@/app/actions/product"
 import { toast } from "sonner"
 import { SearchableProductSelect } from "@/components/SearchableProductSelect"
-import Link from "next/link"
 import { ExcelImport } from "./ExcelImport"
 
 interface Product {
@@ -24,6 +24,7 @@ interface Props {
 }
 
 export function ProductEntryForm({ existingProducts }: Props) {
+  const router = useRouter() // Hook de navegación
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("create") 
   
@@ -67,14 +68,12 @@ export function ProductEntryForm({ existingProducts }: Props) {
         {/* BOTONES UNIFICADOS */}
         <div className="flex items-center gap-2">
             
-            {/* BOTÓN XML: Rojo, Ancho Fijo, Sin size="sm" */}
+            {/* BOTÓN XML: Ahora usa onClick en lugar de Link para forzar el estilo */}
             <Button 
-                asChild
+                onClick={() => router.push('/import')}
                 className="h-10 w-[140px] gap-2 bg-[#de2d2d] text-white hover:bg-[#de2d2d]/90 shadow-sm px-3 font-medium border-none"
             >
-                <Link href="/import">
-                    <Wand2 size={16} /> Importar XML
-                </Link>
+                <Wand2 size={16} /> Importar XML
             </Button>
             
             {/* El botón de Excel se importa aquí */}

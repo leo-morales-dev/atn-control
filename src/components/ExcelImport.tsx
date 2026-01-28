@@ -75,7 +75,7 @@ export function ExcelImport() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {/* BOTÓN EXCEL: Rojo, Ancho Fijo, Sin size="sm" */}
+        {/* BOTÓN EXCEL */}
         <Button 
             className="h-10 w-[140px] gap-2 bg-[#de2d2d] text-white hover:bg-[#de2d2d]/90 shadow-sm px-3 font-medium border-none"
         >
