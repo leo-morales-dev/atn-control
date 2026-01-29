@@ -68,15 +68,19 @@ export async function processXmlImport(items: any[]) {
     await prisma.$transaction(async (tx) => {
       for (const item of items) {
         
+        // Esta lógica se mantiene para los SupplierCodes y shortCode
         const newCode = item.shortCode || item.code
         const provider = item.providerName || "Proveedor General"
+        
         let logDescription = ""
+        // CORRECCIÓN: Inicializamos una variable explícita para el código del sistema
+        let systemCode = item.code 
 
         if (item.action === 'create') {
           // --- CREAR ---
           await tx.product.create({
             data: {
-              code: item.code,
+              code: item.code, // Aquí usa el código de sistema correctamente
               description: item.description,
               category: item.category,
               stock: item.quantity,
@@ -92,11 +96,13 @@ export async function processXmlImport(items: any[]) {
           })
           
           logDescription = `Alta Nueva (XML): ${item.description}`
+          // En creación, systemCode ya es item.code, así que está bien.
 
         } else if (item.action === 'link' && item.linkedProductId) {
           // --- VINCULAR ---
           const prodId = item.linkedProductId
           
+          // ... (lógica de supplierCode igual) ...
           const existingKey = await tx.supplierCode.findFirst({
               where: { productId: prodId, code: newCode }
           })
@@ -109,6 +115,9 @@ export async function processXmlImport(items: any[]) {
 
           const currentProd = await tx.product.findUnique({ where: { id: prodId } })
           if (currentProd) {
+             // CORRECCIÓN: Actualizamos systemCode con el código real de la base de datos
+             systemCode = currentProd.code
+
              let updatedShortCode = currentProd.shortCode || ""
              if (newCode && !updatedShortCode.includes(newCode)) {
                  updatedShortCode = updatedShortCode ? `${updatedShortCode} / ${newCode}` : newCode
@@ -127,14 +136,14 @@ export async function processXmlImport(items: any[]) {
         }
 
         // --- REGISTRO INDIVIDUAL EN HISTORIAL ---
-        // Esto crea un renglón en la tabla SystemLog por CADA producto del bucle
         if (logDescription) {
             await tx.systemLog.create({
                 data: {
                     action: "INGRESO XML",
                     module: "INVENTARIO",
                     description: logDescription,
-                    details: `Cant: +${item.quantity} | Código: ${newCode} | Prov: ${provider}`
+                    // CORRECCIÓN: Usamos systemCode en lugar de newCode para la etiqueta Código:
+                    details: `Cant: +${item.quantity} | Código: ${systemCode} | Prov: ${provider}`
                 }
             })
         }

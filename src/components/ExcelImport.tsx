@@ -20,8 +20,8 @@ export function ExcelImport() {
   const [open, setOpen] = useState(false)
 
   const handleDownloadTemplate = () => {
-    const headers = ["CODIGO", "CLAVE_PROV", "DESCRIPCION", "CATEGORIA", "STOCK", "MINIMO"]
-    const example = ["HER-001", "TAL-500", "TALADRO INDUSTRIAL", "Herramienta", 10, 2]
+    const headers = ["CODIGO", "CLAVE_PROV", "DESCRIPCION", "CATEGORIA", "STOCK", "MINIMO", "PROVEEDOR"]
+    const example = ["HER-001", "TAL-500", "TALADRO INDUSTRIAL", "Herramienta", 10, 2, "Nombre del Proveedor S.A."]
     
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([headers, example])

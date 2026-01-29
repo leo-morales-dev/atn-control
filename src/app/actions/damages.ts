@@ -2,14 +2,13 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
-import { logHistory } from "@/lib/logger" // <--- IMPORTANTE: Importamos el logger
+// import { logHistory } from "@/lib/logger" // <--- YA NO LO NECESITAMOS AQUÍ
 
 export async function createDamageReport(formData: FormData) {
   const productId = parseInt(formData.get("productId") as string)
   const quantity = parseInt(formData.get("quantity") as string)
   const reason = formData.get("reason") as string
   const notes = formData.get("notes") as string
-  // Capturamos la clave específica seleccionada (si existe)
   const supplierCode = formData.get("supplierCode") as string 
 
   if (!productId || !quantity || !reason) {
@@ -30,7 +29,7 @@ export async function createDamageReport(formData: FormData) {
           quantity,
           reason,
           notes,
-          affectedSupplierCode: supplierCode || product.shortCode, // Usamos la seleccionada o la default
+          affectedSupplierCode: supplierCode || product.shortCode, 
           date: new Date(),
         },
       })
@@ -41,13 +40,15 @@ export async function createDamageReport(formData: FormData) {
         data: { stock: { decrement: quantity } },
       })
 
-      // 4. REGISTRAR EN HISTORIAL (ESTO ES LO QUE FALTABA)
-      // Guardamos explícitamente "Código: ..." para que la tabla de historial lo detecte.
-      await logHistory({
-          action: `BAJA - ${reason.toUpperCase()}`,
-          module: "BAJAS",
-          description: `Se dieron de baja ${quantity} unidades de ${product.description}`,
-          details: `Código: ${product.code} | Ref. Prov Afectada: ${supplierCode || "N/A"} | Motivo: ${notes}`
+      // 4. REGISTRAR EN HISTORIAL (CORREGIDO)
+      // Usamos 'tx' en lugar de logHistory para evitar el bloqueo (Deadlock)
+      await tx.systemLog.create({
+          data: {
+              action: `BAJA - ${reason.toUpperCase()}`,
+              module: "BAJAS", // Asegúrate que coincida con tus filtros (String)
+              description: `Se dieron de baja ${quantity} unidades de ${product.description}`,
+              details: `Código: ${product.code} | Ref. Prov Afectada: ${supplierCode || "N/A"} | Motivo: ${notes}`
+          }
       })
     })
 
@@ -56,11 +57,12 @@ export async function createDamageReport(formData: FormData) {
     revalidatePath("/")
     return { success: true }
   } catch (error: any) {
+    console.error(error)
     return { success: false, error: error.message || "Error al procesar" }
   }
 }
 
-// La función de eliminar se mantiene igual (reversión de stock)
+// ... (El resto de la función deleteDamageReport sigue igual)
 export async function deleteDamageReport(reportId: number) {
   try {
     await prisma.$transaction(async (tx) => {
@@ -73,6 +75,8 @@ export async function deleteDamageReport(reportId: number) {
       })
 
       await tx.damageReport.delete({ where: { id: reportId } })
+      
+      // Opcional: Si quisieras loguear la reversión, también deberías usar tx.systemLog.create aquí
     })
 
     revalidatePath("/damages")

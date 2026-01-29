@@ -9,47 +9,46 @@ export async function importProductsFromExcel(products: any[]) {
 
   try {
     // -------------------------------------------------------------------------
-    // PASO 1: VALIDACIÓN DE SEGURIDAD (DETECTAR DUPLICADOS ANTES DE PROCESAR)
+    // PASO 1: VALIDACIÓN DE SEGURIDAD
     // -------------------------------------------------------------------------
-    
-    // Filtramos solo los productos que traen un código manual
     const codesToCheck = products
         .filter(p => p.CODIGO)
         .map(p => String(p.CODIGO).trim().toUpperCase().replace(/'/g, '-'));
 
     if (codesToCheck.length > 0) {
-        // Buscamos si alguno de estos códigos YA existe en la base de datos
         const existingProducts = await prisma.product.findMany({
-            where: {
-                code: { in: codesToCheck }
-            },
+            where: { code: { in: codesToCheck } },
             select: { code: true, description: true }
         });
 
-        // ¡ALERTA! Si encontramos coincidencias, BLOQUEAMOS TODA LA IMPORTACIÓN
         if (existingProducts.length > 0) {
             const duplicateList = existingProducts.map(p => `${p.code} (${p.description})`).join(", ");
             return { 
                 success: false, 
-                error: `IMPORTACIÓN DETENIDA: Se encontraron códigos QR que ya existen en el sistema. Para evitar sobrescribir datos, corrige tu Excel y vuelve a intentarlo.\n\nDuplicados encontrados: ${duplicateList}` 
+                error: `IMPORTACIÓN DETENIDA: Códigos duplicados encontrados: ${duplicateList}` 
             };
         }
     }
 
     // -------------------------------------------------------------------------
-    // PASO 2: PROCESAMIENTO (SOLO SI NO HAY DUPLICADOS)
+    // PASO 2: PROCESAMIENTO
     // -------------------------------------------------------------------------
     for (const p of products) {
       if (!p.DESCRIPCION || !p.CATEGORIA) {
         continue
       }
 
-      // Normalizar datos
-      const code = p.CODIGO ? String(p.CODIGO).trim().toUpperCase().replace(/'/g, '-') // <--- CORRECCIÓN 
+      // Normalizar datos básicos
+      const code = p.CODIGO ? String(p.CODIGO).trim().toUpperCase().replace(/'/g, '-') 
         : `IMP-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`
+      
       const shortCode = p.CLAVE_PROV ? String(p.CLAVE_PROV).trim() : code
       const description = String(p.DESCRIPCION).trim()
       
+      // NUEVO: Leemos el nombre del proveedor
+      // Si no viene en el Excel, ponemos uno genérico o lo dejamos vacío
+      const providerName = p.PROVEEDOR ? String(p.PROVEEDOR).trim() : "Proveedor Excel"
+
       let category = String(p.CATEGORIA).trim()
       if (!['Herramienta', 'Consumible', 'EPP'].includes(category)) {
           category = 'Consumible'
@@ -58,15 +57,22 @@ export async function importProductsFromExcel(products: any[]) {
       const stock = parseInt(p.STOCK) || 0
       const minStock = parseInt(p.MINIMO) || 5
 
-      // Como ya validamos arriba que NO existen duplicados, podemos usar create directamente con seguridad
+      // CREACIÓN DEL PRODUCTO + RELACIÓN CON PROVEEDOR
       await prisma.product.create({
         data: {
             code,
-            shortCode,
+            shortCode, // Clave del proveedor (ej. DCD7781D2)
             description,
             category,
             stock,
-            minStock
+            minStock,
+            // AQUÍ ESTÁ LA MAGIA: Creamos la relación en SupplierCode
+            supplierCodes: {
+                create: {
+                    code: shortCode,      // La clave del proveedor
+                    provider: providerName // El NOMBRE del proveedor (Nuevo)
+                }
+            }
         }
       })
 
@@ -74,8 +80,9 @@ export async function importProductsFromExcel(products: any[]) {
       await logHistory({
           action: "INGRESO EXCEL",
           module: "INVENTARIO",
-          description: `Alta masiva via Excel: ${description}`,
-          details: `Stock Inicial: ${stock} | Categ: ${category} | Código: ${code}`
+          description: `Alta Excel: ${description}`,
+          // Guardamos también el proveedor en el log
+          details: `Stock: ${stock} | Categ: ${category} | Cod: ${code} | Prov: ${providerName}`
       })
 
       successCount++

@@ -58,7 +58,7 @@ export function SearchableProductSelect({ products, value, onChange, disabled }:
         </Button>
       </PopoverTrigger>
       
-      <PopoverContent className="w-[300px] p-0 z-[99999]" align="start">
+      <PopoverContent className="w-[300px] p-0 z-[99999]" align="start" side="bottom" avoidCollisions={false}>
         <Command>
           {/* AQUÍ ESTÁ LA CORRECCIÓN GLOBAL DEL ESCÁNER:
               Interceptamos el valor y reemplazamos ' por - al vuelo.
