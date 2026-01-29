@@ -15,7 +15,7 @@ export async function importProductsFromExcel(products: any[]) {
     // Filtramos solo los productos que traen un código manual
     const codesToCheck = products
         .filter(p => p.CODIGO)
-        .map(p => String(p.CODIGO).trim().toUpperCase());
+        .map(p => String(p.CODIGO).trim().toUpperCase().replace(/'/g, '-'));
 
     if (codesToCheck.length > 0) {
         // Buscamos si alguno de estos códigos YA existe en la base de datos
@@ -45,7 +45,8 @@ export async function importProductsFromExcel(products: any[]) {
       }
 
       // Normalizar datos
-      const code = p.CODIGO ? String(p.CODIGO).trim().toUpperCase() : `IMP-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`
+      const code = p.CODIGO ? String(p.CODIGO).trim().toUpperCase().replace(/'/g, '-') // <--- CORRECCIÓN 
+        : `IMP-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`
       const shortCode = p.CLAVE_PROV ? String(p.CLAVE_PROV).trim() : code
       const description = String(p.DESCRIPCION).trim()
       

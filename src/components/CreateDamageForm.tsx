@@ -1,4 +1,3 @@
-// src/components/CreateDamageForm.tsx (RENOMBRADO)
 "use client"
 
 import { useState, useMemo } from "react"
@@ -11,13 +10,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { SearchableProductSelect } from "@/components/SearchableProductSelect"
 import { createDamageReport } from "@/app/actions/damages"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
-// Interfaz completa para recibir las claves
 interface Product {
     id: number
     description: string
     code: string
     shortCode: string | null
+    stock: number 
     supplierCodes: { id: number, code: string, provider: string | null }[]
 }
 
@@ -25,41 +25,56 @@ interface Props {
     products: Product[]
 }
 
-export function CreateDamageForm({ products }: Props) { // <-- Renombrado a "Form"
+export function CreateDamageForm({ products }: Props) {
+    const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [success, setSuccess] = useState(false)
     const [selectedProductId, setSelectedProductId] = useState("")
 
-    // 1. Encontrar el producto seleccionado con todos sus datos
     const selectedProduct = useMemo(() =>
         products.find(p => p.id.toString() === selectedProductId),
         [selectedProductId, products])
 
-    // 2. Detectar si tiene múltiples proveedores
-    const hasMultipleKeys = selectedProduct && selectedProduct.supplierCodes.length > 0
+    const hasMultipleKeys = selectedProduct && selectedProduct.supplierCodes && selectedProduct.supplierCodes.length > 0
+
+    // --- SOLUCIÓN AL ERROR DE LLAVES DUPLICADAS ---
+    // Filtramos para que NO aparezca en la lista si es igual al código original
+    const uniqueSupplierCodes = useMemo(() => {
+        if (!selectedProduct || !selectedProduct.supplierCodes) return [];
+        return selectedProduct.supplierCodes.filter(sc => sc.code !== selectedProduct.shortCode);
+    }, [selectedProduct]);
 
     async function handleSubmit(formData: FormData) {
         if (!selectedProductId) {
-            toast.error("Debes escanear un producto")
+            toast.error("Falta Producto", { description: "Debes escanear o seleccionar un producto." })
             return
         }
 
         setLoading(true)
         setSuccess(false)
+        
         formData.append("productId", selectedProductId)
+
+        const type = formData.get("reason")
+        const description = formData.get("notes")
+        
+        if (type) formData.set("type", type) 
+        if (description) formData.set("description", description)
 
         const res = await createDamageReport(formData)
         setLoading(false)
 
         if (res.success) {
-            toast.success("Baja registrada correctamente")
+            toast.success("Baja registrada", { description: "Stock actualizado correctamente." })
             setSuccess(true)
             setSelectedProductId("")
-            // Resetear el formulario visualmente (opcional, si usas un ref)
+            
             const form = document.getElementById('damage-form') as HTMLFormElement;
             if (form) form.reset();
+            
+            router.refresh()
         } else {
-            toast.error(res.error)
+            toast.error("Error al registrar", { description: res.error })
         }
     }
 
@@ -85,7 +100,6 @@ export function CreateDamageForm({ products }: Props) { // <-- Renombrado a "For
 
             <form id="damage-form" action={handleSubmit} className="space-y-5">
 
-                {/* 1. BUSCADOR / ESCÁNER */}
                 <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-[#232323] uppercase flex items-center gap-2">
                         <QrCode size={14} /> Escanear Producto
@@ -99,8 +113,7 @@ export function CreateDamageForm({ products }: Props) { // <-- Renombrado a "For
                     </div>
                 </div>
 
-                {/* 2. SELECTOR DE CLAVE (Solo aparece si hay múltiples proveedores) */}
-                {hasMultipleKeys && (
+                {hasMultipleKeys && selectedProduct && (
                     <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2">
                         <Label className="text-xs font-bold text-blue-600 uppercase">
                             Selecciona la Clave del Proveedor
@@ -112,15 +125,16 @@ export function CreateDamageForm({ products }: Props) { // <-- Renombrado a "For
                                     <SelectValue placeholder="Seleccionar clave..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {/* Opción Principal */}
+                                    {/* Opción Principal: Le ponemos key fija para evitar colisiones */}
                                     {selectedProduct.shortCode && (
-                                        <SelectItem value={selectedProduct.shortCode}>
+                                        <SelectItem key="main-code" value={selectedProduct.shortCode}>
                                             {selectedProduct.shortCode} (Original)
                                         </SelectItem>
                                     )}
-                                    {/* Opciones de Proveedores Adicionales */}
-                                    {selectedProduct.supplierCodes.map((sc) => (
-                                        <SelectItem key={sc.id} value={sc.code}>
+                                    
+                                    {/* Opciones Adicionales: Usamos la lista filtrada */}
+                                    {uniqueSupplierCodes.map((sc) => (
+                                        <SelectItem key={`supp-${sc.id}`} value={sc.code}>
                                             {sc.code} {sc.provider ? `- ${sc.provider}` : ""}
                                         </SelectItem>
                                     ))}
@@ -137,21 +151,27 @@ export function CreateDamageForm({ products }: Props) { // <-- Renombrado a "For
                             name="quantity"
                             type="number"
                             min="1"
+                            max={selectedProduct?.stock || 9999}
                             defaultValue="1"
                             className="font-bold text-center h-10 focus:border-[#232323]"
                         />
+                         {selectedProduct && (
+                            <p className="text-[10px] text-zinc-400 text-center">
+                                Max: {selectedProduct.stock}
+                            </p>
+                        )}
                     </div>
 
                     <div className="space-y-1.5">
                         <Label className="text-xs font-bold text-[#232323] uppercase">Motivo</Label>
-                        <Select name="reason" defaultValue="Daño">
+                        <Select name="reason" defaultValue="DAÑO">
                             <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="Daño">Daño / Rotura</SelectItem>
-                                <SelectItem value="Pérdida">Extravío / Pérdida</SelectItem>
-                                <SelectItem value="Robo">Robo</SelectItem>
-                                <SelectItem value="Caducado">Caducado / Vencido</SelectItem>
-                                <SelectItem value="Defecto">Defecto de Fábrica</SelectItem>
+                                <SelectItem value="DAÑO">Daño / Rotura</SelectItem>
+                                <SelectItem value="PERDIDA">Extravío / Pérdida</SelectItem>
+                                <SelectItem value="ROBO">Robo</SelectItem>
+                                <SelectItem value="CADUCADO">Caducado / Vencido</SelectItem>
+                                <SelectItem value="DEFECTO">Defecto de Fábrica</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>

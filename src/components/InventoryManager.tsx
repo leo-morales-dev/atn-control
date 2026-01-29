@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation" 
 import { Product } from "@prisma/client"
-import { Printer, AlertTriangle, CheckSquare, Square, Filter, XCircle, Bell, BellOff, RotateCcw, QrCode } from "lucide-react"
+import { Printer, AlertTriangle, CheckSquare, Square, Filter, XCircle, Bell, BellOff, RotateCcw, QrCode, ChevronLeft, ChevronRight } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,11 +29,20 @@ export function InventoryManager({ products, initialLowStock = [] }: Props) {
   const [filterMode, setFilterMode] = useState<'all' | 'low'>('all')
   const [alertSnoozedUntil, setAlertSnoozedUntil] = useState<number | null>(null)
 
+  // --- PAGINACIÓN ---
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
   const alertProducts = initialLowStock.length > 0 ? initialLowStock : products
 
   useEffect(() => {
      checkSnoozeStatus()
   }, [])
+
+  // Resetear a la página 1 si cambiamos el filtro
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterMode, products])
 
   const checkSnoozeStatus = () => {
       const snooze = localStorage.getItem("inventory_alert_snooze")
@@ -57,6 +66,13 @@ export function InventoryManager({ products, initialLowStock = [] }: Props) {
       return true 
   })
 
+  // Lógica de Paginación
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
+  const paginatedProducts = filteredProducts.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
   const lowStockCount = products.filter(p => p.stock <= p.minStock).length
 
   const toggleSelect = (id: number) => {
@@ -64,6 +80,9 @@ export function InventoryManager({ products, initialLowStock = [] }: Props) {
   }
 
   const toggleAll = () => {
+    // Selecciona solo los visibles en la página actual o todos? 
+    // Usualmente es mejor seleccionar los visibles para evitar confusiones, 
+    // pero aquí seleccionaremos TODOS los filtrados para facilitar acciones masivas.
     if (selectedIds.length === filteredProducts.length) setSelectedIds([]) 
     else setSelectedIds(filteredProducts.map(p => p.id)) 
   }
@@ -163,107 +182,150 @@ export function InventoryManager({ products, initialLowStock = [] }: Props) {
             </div>
         )}
 
-        <div className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
-             <Table>
-                <TableHeader className="bg-zinc-50">
-                  <TableRow>
-                    <TableHead className="w-[50px] text-center">
-                        <Button variant="ghost" size="icon" onClick={toggleAll} className="h-6 w-6">
-                            {selectedIds.length > 0 && selectedIds.length === filteredProducts.length 
-                                ? <CheckSquare size={16} className="text-zinc-900" /> 
-                                : <Square size={16} className="text-zinc-400" />
-                            }
-                        </Button>
-                    </TableHead>
-
-                    {/* NUEVA COLUMNA: CÓDIGO QR */}
-                    <TableHead className="w-[140px]">Código QR</TableHead>
-
-                    <TableHead className="w-[180px]">Ref. Proveedor</TableHead>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead className="text-center w-[120px]">Categoría</TableHead>
-                    <TableHead className="text-right w-[100px]">Stock</TableHead>
-                    <TableHead className="text-right w-[100px]">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProducts.length === 0 ? (
+        <div className="rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden flex flex-col">
+             <div className="flex-1 overflow-auto">
+                <Table>
+                    <TableHeader className="bg-zinc-50">
                     <TableRow>
-                      <TableCell colSpan={7} className="h-32 text-center text-zinc-500">
-                        {filterMode === 'low' 
-                            ? "¡Todo en orden! No hay productos con stock bajo en esta vista." 
-                            : "Sin resultados."}
-                      </TableCell>
+                        <TableHead className="w-[50px] text-center">
+                            <Button variant="ghost" size="icon" onClick={toggleAll} className="h-6 w-6">
+                                {selectedIds.length > 0 && selectedIds.length === filteredProducts.length 
+                                    ? <CheckSquare size={16} className="text-zinc-900" /> 
+                                    : <Square size={16} className="text-zinc-400" />
+                                }
+                            </Button>
+                        </TableHead>
+
+                        <TableHead className="w-[140px]">Código QR</TableHead>
+                        <TableHead className="w-[180px]">Ref. Proveedor</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead className="text-center w-[120px]">Categoría</TableHead>
+                        <TableHead className="text-right w-[100px]">Stock</TableHead>
+                        <TableHead className="text-right w-[100px]">Acciones</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredProducts.map((product) => {
-                      const isSelected = selectedIds.includes(product.id)
-                      const isLowStock = product.stock <= product.minStock
-
-                      return (
-                        <TableRow key={product.id} className={`transition-colors ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-zinc-50/50'}`}>
-                            <TableCell className="text-center">
-                                <div onClick={() => toggleSelect(product.id)} className="cursor-pointer flex justify-center">
-                                    {isSelected 
-                                        ? <CheckSquare size={16} className="text-blue-600" /> 
-                                        : <Square size={16} className="text-zinc-300" />
-                                    }
-                                </div>
-                            </TableCell>
-
-                            {/* DATO DEL CÓDIGO */}
-                            <TableCell className="font-mono text-xs text-zinc-500">
-                                <div className="flex items-center gap-1.5">
-                                    <QrCode size={12} className="text-zinc-300" />
-                                    {product.code}
-                                </div>
-                            </TableCell>
-
-                            <TableCell>
-                              <ProviderKeyDisplay shortCode={product.shortCode} />
-                            </TableCell>
-
-                            <TableCell className="font-medium text-zinc-900">
-                              {product.description}
-                            </TableCell>
-
-                            <TableCell className="text-center">
-                              <Badge variant={product.category === 'Herramienta' ? "default" : "secondary"}>
-                                {product.category}
-                              </Badge>
-                            </TableCell>
-
-                            <TableCell className="text-right font-bold">
-                              {isLowStock ? (
-                                  <div className="flex items-center justify-end gap-1 text-red-600 animate-pulse">
-                                      <AlertTriangle size={14} />
-                                      <span>{product.stock}</span>
-                                  </div>
-                              ) : (
-                                  <span className="text-green-600">{product.stock}</span>
-                              )}
-                            </TableCell>
-
-                            <TableCell className="text-right flex justify-end gap-1">
-                              <Link 
-                                href={`/print/bulk?ids=${product.id}`} 
-                                className="p-2 hover:bg-zinc-100 rounded-md text-zinc-600 transition-colors"
-                                title="Imprimir Etiqueta"
-                              >
-                                <Printer size={16} />
-                              </Link>
-                              <EditProductDialog product={product} />
-                              <DeleteProductButton 
-                                productId={product.id} 
-                                description={product.description} 
-                              />
-                            </TableCell>
+                    </TableHeader>
+                    <TableBody>
+                    {paginatedProducts.length === 0 ? (
+                        <TableRow>
+                        <TableCell colSpan={7} className="h-32 text-center text-zinc-500">
+                            {filterMode === 'low' 
+                                ? "¡Todo en orden! No hay productos con stock bajo en esta vista." 
+                                : "Sin resultados."}
+                        </TableCell>
                         </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-             </Table>
+                    ) : (
+                        paginatedProducts.map((product) => {
+                        const isSelected = selectedIds.includes(product.id)
+                        const isLowStock = product.stock <= product.minStock
+
+                        return (
+                            <TableRow key={product.id} className={`transition-colors ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-zinc-50/50'}`}>
+                                <TableCell className="text-center">
+                                    <div onClick={() => toggleSelect(product.id)} className="cursor-pointer flex justify-center">
+                                        {isSelected 
+                                            ? <CheckSquare size={16} className="text-blue-600" /> 
+                                            : <Square size={16} className="text-zinc-300" />
+                                        }
+                                    </div>
+                                </TableCell>
+
+                                <TableCell className="font-mono text-xs text-zinc-500">
+                                    <div className="flex items-center gap-1.5">
+                                        <QrCode size={12} className="text-zinc-300" />
+                                        {product.code}
+                                    </div>
+                                </TableCell>
+
+                                <TableCell>
+                                <ProviderKeyDisplay shortCode={product.shortCode} />
+                                </TableCell>
+
+                                <TableCell className="font-medium text-zinc-900">
+                                {product.description}
+                                </TableCell>
+
+                                <TableCell className="text-center">
+                                <Badge variant={product.category === 'Herramienta' ? "default" : "secondary"}>
+                                    {product.category}
+                                </Badge>
+                                </TableCell>
+
+                                <TableCell className="text-right font-bold">
+                                {isLowStock ? (
+                                    <div className="flex items-center justify-end gap-1 text-red-600 animate-pulse">
+                                        <AlertTriangle size={14} />
+                                        <span>{product.stock}</span>
+                                    </div>
+                                ) : (
+                                    <span className="text-green-600">{product.stock}</span>
+                                )}
+                                </TableCell>
+
+                                <TableCell className="text-right flex justify-end gap-1">
+                                <Link 
+                                    href={`/print/bulk?ids=${product.id}`} 
+                                    className="p-2 hover:bg-zinc-100 rounded-md text-zinc-600 transition-colors"
+                                    title="Imprimir Etiqueta"
+                                >
+                                    <Printer size={16} />
+                                </Link>
+                                <EditProductDialog product={product} />
+                                <DeleteProductButton 
+                                    productId={product.id} 
+                                    description={product.description} 
+                                />
+                                </TableCell>
+                            </TableRow>
+                        )
+                        })
+                    )}
+                    </TableBody>
+                </Table>
+             </div>
+             
+             {/* --- CONTROLES DE PAGINACIÓN --- */}
+             {totalPages > 1 && (
+                 <div className="flex items-center justify-center gap-2 p-4 bg-zinc-50 border-t border-zinc-200">
+                     
+                     <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="h-8 w-8 bg-white border-red-100 text-[#de2d2d] hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                     >
+                        <ChevronLeft size={16} />
+                     </Button>
+
+                     <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                            <Button
+                                key={page}
+                                variant={currentPage === page ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setCurrentPage(page)}
+                                className={`h-8 w-8 p-0 text-xs font-bold ${
+                                    currentPage === page 
+                                        ? "bg-[#de2d2d] text-white hover:bg-[#de2d2d]/90" 
+                                        : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-100"
+                                }`}
+                            >
+                                {page}
+                            </Button>
+                        ))}
+                     </div>
+
+                     <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="h-8 w-8 bg-white border-red-100 text-[#de2d2d] hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                     >
+                        <ChevronRight size={16} />
+                     </Button>
+                 </div>
+             )}
         </div>
     </div>
   )

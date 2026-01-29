@@ -4,20 +4,18 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Calendar, Filter, Download } from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Search } from "lucide-react"
 
 export function HistoryFilters() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Estados iniciales basados en URL
   const [search, setSearch] = useState(searchParams.get("q") || "")
   const [category, setCategory] = useState(searchParams.get("cat") || "ALL")
   const [dateFrom, setDateFrom] = useState(searchParams.get("from") || "")
   const [dateTo, setDateTo] = useState(searchParams.get("to") || "")
 
-  // Efecto tipo "Debounce" para la búsqueda (espera a que termines de escribir)
+  // Debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       applyFilters()
@@ -27,10 +25,16 @@ export function HistoryFilters() {
 
   const applyFilters = () => {
     const params = new URLSearchParams()
-    if (search) params.set("q", search)
+    
+    // CORRECCIÓN CRÍTICA: Usamos .trim() para quitar espacios fantasmas del escáner
+    const cleanSearch = search.trim() 
+
+    if (cleanSearch) params.set("q", cleanSearch)
     if (category && category !== "ALL") params.set("cat", category)
     if (dateFrom) params.set("from", dateFrom)
     if (dateTo) params.set("to", dateTo)
+    
+    params.set("page", "1")
     
     router.replace(`/history?${params.toString()}`)
   }
@@ -69,8 +73,15 @@ export function HistoryFilters() {
                 <Input 
                     placeholder="Buscar por código, nombre, descripción..." 
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-9 h-10 border-zinc-200 bg-zinc-50/50 focus:bg-white transition-all"
+                    onChange={(e) => {
+                        // 1. Convertimos a mayúsculas
+                        // 2. Corregimos el error del escáner ' por -
+                        // NOTA: No usamos trim() aquí para permitir escribir frases con espacios, 
+                        // el trim() final lo hace applyFilters arriba.
+                        const clean = e.target.value.toUpperCase().replace(/'/g, '-')
+                        setSearch(clean)
+                    }}
+                    className="pl-9 h-10 border-zinc-200 bg-zinc-50/50 focus:bg-white transition-all font-medium"
                 />
             </div>
 

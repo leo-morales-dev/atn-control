@@ -33,6 +33,8 @@ interface Props {
 
 export function SearchableProductSelect({ products, value, onChange, disabled }: Props) {
   const [open, setOpen] = React.useState(false)
+  // Estado para controlar el texto del buscador y aplicar la corrección del escáner
+  const [searchQuery, setSearchQuery] = React.useState("")
 
   // Encontramos el producto seleccionado para mostrar su nombre en el botón cerrado
   const selectedProduct = products.find((product) => product.id.toString() === value)
@@ -56,10 +58,23 @@ export function SearchableProductSelect({ products, value, onChange, disabled }:
         </Button>
       </PopoverTrigger>
       
-      {/* EL CONTENIDO DEL BUSCADOR */}
       <PopoverContent className="w-[300px] p-0 z-[99999]" align="start">
         <Command>
-          <CommandInput placeholder="Escribe nombre o código..." className="h-9 text-xs" />
+          {/* AQUÍ ESTÁ LA CORRECCIÓN GLOBAL DEL ESCÁNER:
+              Interceptamos el valor y reemplazamos ' por - al vuelo.
+          */}
+          <CommandInput 
+            placeholder="Escribe nombre o código..." 
+            className="h-9 text-xs"
+            value={searchQuery}
+            onValueChange={(val) => {
+                // 1. Convertimos a mayúsculas (opcional, ayuda a estandarizar)
+                // 2. Reemplazamos el apóstrofe del escáner (') por el guion del sistema (-)
+                const clean = val.toUpperCase().replace(/'/g, '-')
+                setSearchQuery(clean)
+            }}
+          />
+          
           <CommandList>
             <CommandEmpty className="py-2 text-center text-xs text-zinc-500">
                 No encontrado.
@@ -68,12 +83,12 @@ export function SearchableProductSelect({ products, value, onChange, disabled }:
               {products.map((product) => (
                 <CommandItem
                   key={product.id}
-                  // Este 'value' es lo que usa el buscador interno para filtrar.
-                  // Concatenamos nombre y código para que encuentres por cualquiera de los dos.
+                  // Concatenamos nombre y código para que el filtro interno de Command funcione con ambos
                   value={`${product.description} ${product.code}`} 
                   onSelect={() => {
                     onChange(product.id.toString())
                     setOpen(false)
+                    setSearchQuery("") // Limpiamos al seleccionar
                   }}
                   className="text-xs cursor-pointer"
                 >

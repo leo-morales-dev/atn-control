@@ -38,7 +38,13 @@ export function InventoryForm({ productsList = [] }: Props) {
   }
 
   const handleCodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.target.value = e.target.value.toUpperCase().replace(/\s/g, '');
+    // 1. Convertir a Mayúsculas
+    // 2. Reemplazar espacios por nada
+    // 3. ¡NUEVO! Reemplazar apóstrofe (') por guion (-)
+    e.target.value = e.target.value
+        .toUpperCase()
+        .replace(/\s/g, '')
+        .replace(/'/g, '-'); // <--- MAGIA AQUÍ
   }
 
   const generateCode = () => {

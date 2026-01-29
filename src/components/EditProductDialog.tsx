@@ -42,8 +42,10 @@ export function EditProductDialog({ product }: { product: Product }) {
   }
 
   const handleCodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Mayúsculas y sin espacios
-    e.target.value = e.target.value.toUpperCase().replace(/\s/g, '');
+    e.target.value = e.target.value
+        .toUpperCase()
+        .replace(/\s/g, '')
+        .replace(/'/g, '-'); // <--- MAGIA AQUÍ
   }
 
   async function handleSubmit(formData: FormData) {

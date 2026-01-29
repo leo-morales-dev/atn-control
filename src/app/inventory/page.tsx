@@ -1,24 +1,20 @@
 import { getProducts, getInventoryStats } from "@/app/actions/product"
-// CORRECCIÓN AQUÍ: Usamos llaves {} porque es un 'named export'
 import { InventoryForm } from "@/components/InventoryForm" 
 import { InventoryStats } from "@/components/InventoryStats"
 import { InventoryManager } from "@/components/InventoryManager"
-import { Search } from "@/components/Search"
+import { InventorySearch } from "@/components/InventorySearch" // <--- CAMBIO IMPORTANTE
 import { BulkDeleteButton } from "@/components/BulkDeleteButton"
-import { ExcelImport } from "@/components/ExcelImport" // Asegúrate de tener este también
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { FileUp } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
 
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ query?: string, filter?: string }>
+  // Ahora esperamos 'q' porque InventorySearch usa 'q' en la URL
+  searchParams?: Promise<{ q?: string, filter?: string }>
 }) {
   const params = await searchParams
-  const query = params?.query || ""
+  const query = params?.q || "" // Leemos el parámetro 'q'
   const filter = params?.filter || "all"
 
   // Carga de datos en paralelo
@@ -29,7 +25,6 @@ export default async function InventoryPage({
   ])
 
   const products = productsData.data || []
-  // Aseguramos que stats nunca sea undefined
   const stats = statsData.data ?? { total: 0, tools: 0, consumables: 0, lowStock: 0 }
   const globalLowStock = globalLowStockData.data || []
 
@@ -43,16 +38,17 @@ export default async function InventoryPage({
             <p className="text-zinc-500 mt-1 text-sm">Control total de existencias y reabastecimiento.</p>
         </div>
 
-        {/* 1. ESTADÍSTICAS (Con tus colores personalizados) */}
+        {/* 1. ESTADÍSTICAS */}
         <InventoryStats stats={stats} />
 
-        {/* 2. FORMULARIO DE NUEVO INGRESO */}
+        {/* 2. FORMULARIO DE NUEVO INGRESO (Ya incluye ExcelImport dentro) */}
         <InventoryForm productsList={products} />
           
-        {/* 3. BARRA DE HERRAMIENTAS INFERIOR (Buscador y Tabla) */}
+        {/* 3. BARRA DE HERRAMIENTAS INFERIOR */}
         <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center bg-white p-4 rounded-xl border border-zinc-200 shadow-sm">
             <div className="w-full xl:w-96">
-                <Search placeholder="Buscar por nombre, código o categoría..." />
+                {/* Usamos el buscador inteligente que corrige el escáner */}
+                <InventorySearch />
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto justify-end">
                 <BulkDeleteButton />
