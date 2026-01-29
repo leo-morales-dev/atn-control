@@ -17,36 +17,58 @@ export default async function HistoryPage({ searchParams }: Props) {
   const currentPage = Number(params.page) || 1
   const itemsPerPage = 10 
 
-  const where: any = {}
+  // CORRECCIÓN: Inicializamos 'where' con una lista 'AND' para sumar condiciones sin sobrescribirlas
+  const where: any = { AND: [] }
 
+  // 1. CONDICIÓN DE BÚSQUEDA (Search)
   if (params.q) {
-    where.OR = [
-      { description: { contains: params.q } }, 
-      { details: { contains: params.q } },
-      { action: { contains: params.q } }
-    ]
+    where.AND.push({
+      OR: [
+        { description: { contains: params.q } }, 
+        { details: { contains: params.q } },
+        { action: { contains: params.q } }
+      ]
+    })
   }
 
+  // 2. CONDICIÓN DE CATEGORÍA (Filtros)
   if (params.cat && params.cat !== 'ALL') {
     switch (params.cat) {
-        case 'PRESTAMOS': where.module = 'PRESTAMOS'; break;
-        case 'INVENTARIO': where.module = 'INVENTARIO'; break;
-        case 'BAJAS': 
-            where.OR = [
-                { action: { contains: 'BAJA' } }, 
-                { action: { contains: 'DAÑO' } }, 
-                { description: { contains: 'baja' } }
-            ]
+        case 'PRESTAMOS': 
+            where.module = 'PRESTAMOS'; 
             break;
-        case 'EMPLEADOS': where.module = 'EMPLEADOS'; break;
-        default: where.module = params.cat; break;
+        case 'INVENTARIO': 
+            where.module = 'INVENTARIO'; 
+            break;
+        case 'BAJAS': 
+            // CORRECCIÓN: Agregamos esta condición al array AND en lugar de reemplazar 'where.OR'
+            where.AND.push({
+                OR: [
+                    { action: { contains: 'BAJA' } }, 
+                    { action: { contains: 'DAÑO' } }, 
+                    { description: { contains: 'baja' } }
+                ]
+            });
+            break;
+        case 'EMPLEADOS': 
+            where.module = 'EMPLEADOS'; 
+            break;
+        default: 
+            where.module = params.cat; 
+            break;
     }
   }
 
+  // 3. CONDICIÓN DE FECHAS
   if (params.from || params.to) {
     where.timestamp = {}
     if (params.from) where.timestamp.gte = new Date(params.from + "T00:00:00")
     if (params.to) where.timestamp.lte = new Date(params.to + "T23:59:59")
+  }
+
+  // Limpieza: Si el array AND está vacío, lo quitamos para no ensuciar la consulta
+  if (where.AND.length === 0) {
+      delete where.AND;
   }
 
   const totalItems = await prisma.systemLog.count({ where })
@@ -59,36 +81,26 @@ export default async function HistoryPage({ searchParams }: Props) {
     take: itemsPerPage
   })
 
-  // --- EXTRACTOR DE CÓDIGO (LÓGICA BLINDADA) ---
+  // --- EXTRACTOR DE CÓDIGO (Sin cambios, se mantiene tu lógica) ---
   const extractCode = (log: any) => {
     const text = `${log.details || ''} ${log.description || ''}`;
     
-    // 1. ESTRATEGIA PRINCIPAL (Para los nuevos logs generados por el sistema)
-    // Buscamos la etiqueta "Código:" y capturamos TODO hasta encontrar un pipe '|' o el fin de la línea.
-    // Esto soluciona que "desaparezcan" códigos que tenían espacios.
     const labelMatch = text.match(/Código:\s*([^|]+)/i);
     
     if (labelMatch && labelMatch[1]) {
-        // Limpiamos espacios sobrantes (trim) y devolvemos.
         return labelMatch[1].trim().toUpperCase();
     }
 
-    // 2. ESTRATEGIA SECUNDARIA (Para registros viejos)
-    // Solo buscamos patrones estrictos del sistema (PROD, HER, etc.)
     const systemPattern = /\b(PROD|HER|CON|EMP|LOAN)-[A-Z0-9]+\b/i;
     const match = text.match(systemPattern);
 
     if (match) {
         const foundCode = match[0].toUpperCase();
-        
-        // FILTRO DE SEGURIDAD ANTI-PROVEEDOR:
-        // Verificamos si 15 caracteres antes del código encontrado existen palabras como "Ref" o "Prov".
-        // Si es así, asumimos que es un código de proveedor y NO lo mostramos.
         const index = text.toUpperCase().indexOf(foundCode);
         const prefixContext = text.substring(Math.max(0, index - 15), index).toUpperCase();
         
         if (prefixContext.includes("REF") || prefixContext.includes("PROV")) {
-            return null; // Es un proveedor, lo ignoramos.
+            return null; 
         }
 
         return foundCode;

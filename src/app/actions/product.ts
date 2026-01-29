@@ -184,6 +184,8 @@ export async function createOrUpdateProduct(data: FormData) {
   const mode = data.get("mode") as string 
   const quantity = parseInt(data.get("quantity") as string) || 0
   const providerKey = data.get("shortCode") as string || "" 
+  // NUEVO: Leemos el nombre del proveedor. Si está vacío, ponemos uno por defecto.
+  const providerName = (data.get("providerName") as string) || "Ingreso Manual"
 
   try {
     if (mode === "link") {
@@ -204,7 +206,7 @@ export async function createOrUpdateProduct(data: FormData) {
                   data: {
                       productId,
                       code: providerKey,
-                      provider: "Ingreso Manual" 
+                      provider: providerName // <-- AQUÍ GUARDAMOS EL PROVEEDOR
                   }
               })
           }
@@ -212,6 +214,7 @@ export async function createOrUpdateProduct(data: FormData) {
 
       // 2. Actualizar stock y visual
       let updatedShortCode = currentProd.shortCode || ""
+      // Si la clave es nueva y no está en el string visual, la agregamos
       if (providerKey && !updatedShortCode.includes(providerKey)) {
           updatedShortCode = updatedShortCode ? `${updatedShortCode} / ${providerKey}` : providerKey
       }
@@ -229,7 +232,8 @@ export async function createOrUpdateProduct(data: FormData) {
         action: "INGRESO MANUAL (SUMA)",
         module: "INVENTARIO",
         description: `Se sumaron ${quantity} unidades a: ${currentProd.description}`,
-        details: `Código: ${currentProd.code} | Ref. Prov: ${providerKey || "N/A"}`
+        // Agregamos el proveedor al log también
+        details: `Código: ${currentProd.code} | Ref. Prov: ${providerKey || "N/A"} | Prov: ${providerName}`
       })
 
     } else {
@@ -239,7 +243,6 @@ export async function createOrUpdateProduct(data: FormData) {
       const category = data.get("category") as string
       const minStock = parseInt(data.get("minStock") as string) || 5
 
-      // Validación extra de seguridad en servidor (por si acaso falla el cliente)
       const checkExists = await prisma.product.findUnique({ where: { code } })
       if (checkExists) {
           return { success: false, error: "El código ya existe en el sistema." }
@@ -253,9 +256,12 @@ export async function createOrUpdateProduct(data: FormData) {
           stock: quantity,
           minStock,
           shortCode: providerKey,
-          // Creamos la relación aquí también
+          // Creamos la relación aquí también con el NOMBRE
           supplierCodes: {
-              create: providerKey ? [{ code: providerKey, provider: "Ingreso Manual" }] : []
+              create: providerKey ? [{ 
+                  code: providerKey, 
+                  provider: providerName // <-- AQUÍ GUARDAMOS EL PROVEEDOR 
+              }] : []
           }
         }
       })
@@ -265,7 +271,7 @@ export async function createOrUpdateProduct(data: FormData) {
         action: "INGRESO MANUAL (NUEVO)",
         module: "INVENTARIO",
         description: `Alta de producto nuevo: ${description}`,
-        details: `Código: ${code} | Stock Inicial: ${quantity} | Ref. Prov: ${providerKey || "N/A"}`
+        details: `Código: ${code} | Stock Inicial: ${quantity} | Ref. Prov: ${providerKey || "N/A"} | Prov: ${providerName}`
       })
     }
 

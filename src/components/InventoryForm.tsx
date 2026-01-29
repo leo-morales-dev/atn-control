@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation" 
-import { Wand2, Loader2, AlertTriangle, Link as LinkIcon, FileUp, PackagePlus } from "lucide-react" 
+import { Wand2, Loader2, AlertTriangle, Link as LinkIcon, FileUp, PackagePlus, Truck } from "lucide-react" // Agregué Truck icon
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,13 +38,10 @@ export function InventoryForm({ productsList = [] }: Props) {
   }
 
   const handleCodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // 1. Convertir a Mayúsculas
-    // 2. Reemplazar espacios por nada
-    // 3. ¡NUEVO! Reemplazar apóstrofe (') por guion (-)
     e.target.value = e.target.value
         .toUpperCase()
         .replace(/\s/g, '')
-        .replace(/'/g, '-'); // <--- MAGIA AQUÍ
+        .replace(/'/g, '-');
   }
 
   const generateCode = () => {
@@ -60,36 +57,29 @@ export function InventoryForm({ productsList = [] }: Props) {
     setLoading(true)
     formData.append("mode", activeTab)
     
-    // --- VALIDACIONES DE SEGURIDAD ---
-
+    // --- VALIDACIONES ---
     if (activeTab === "create") {
         const code = formData.get("code") as string;
         const shortCode = formData.get("shortCode") as string;
         const description = formData.get("description") as string;
+        // const providerName = formData.get("providerName") as string; // Opcional validarlo si quieres
 
-        // 1. Validar Código Duplicado
         const exists = productsList.some(p => p.code.toUpperCase() === code.toUpperCase().trim());
         if (exists) {
             toast.error("Código Duplicado", { 
-                description: `El código '${code}' ya pertenece a otro producto. Usa un código único o 'Sumar a Existente'.` 
+                description: `El código '${code}' ya pertenece a otro producto.` 
             });
-            setLoading(false);
-            return;
+            setLoading(false); return;
         }
 
-        // 2. Validar Campos Obligatorios
         if (!shortCode.trim()) {
-            toast.error("Falta Referencia de Proveedor", { 
-                description: "La clave del proveedor es obligatoria." 
-            });
-            setLoading(false);
-            return;
+            toast.error("Falta Referencia", { description: "La clave del proveedor es obligatoria." });
+            setLoading(false); return;
         }
 
         if (!description.trim()) {
              toast.error("Falta Descripción", { description: "Escribe el nombre del producto." });
-             setLoading(false);
-             return;
+             setLoading(false); return;
         }
 
         formData.append("category", category)
@@ -98,20 +88,14 @@ export function InventoryForm({ productsList = [] }: Props) {
     if (activeTab === "link") {
         const shortCode = formData.get("shortCode") as string;
 
-        // 1. Validar Selección de Producto
         if (!selectedProductId) {
-            toast.error("Selección Requerida", { description: "Debes buscar y seleccionar un producto para sumarle stock." })
-            setLoading(false)
-            return
+            toast.error("Selección Requerida", { description: "Debes buscar un producto." })
+            setLoading(false); return
         }
 
-        // 2. Validar Referencia de Proveedor (AHORA OBLIGATORIA)
         if (!shortCode.trim()) {
-            toast.error("Falta Referencia de Proveedor", { 
-                description: "Ingresa la clave del proveedor de este nuevo ingreso." 
-            });
-            setLoading(false)
-            return
+            toast.error("Falta Referencia", { description: "Ingresa la clave del proveedor." });
+            setLoading(false); return
         }
 
         formData.append("linkedProductId", selectedProductId)
@@ -122,21 +106,17 @@ export function InventoryForm({ productsList = [] }: Props) {
     setLoading(false)
 
     if (result.success) {
-      toast.success(activeTab === "create" ? "Producto Registrado" : "Stock Actualizado", {
-          description: "La operación se completó exitosamente."
-      })
+      toast.success(activeTab === "create" ? "Producto Registrado" : "Stock Actualizado")
       formRef.current?.reset()
       setSelectedProductId("")
       router.refresh()
     } else {
-      toast.error("Error del Servidor", { description: result.error })
+      toast.error("Error", { description: result.error })
     }
   }
 
   return (
     <Card className="mb-6 border-zinc-200 shadow-sm bg-white overflow-hidden">
-      
-      {/* HEADER */}
       <CardHeader className="py-3 px-5 border-b border-zinc-100 bg-zinc-50/50 flex flex-row items-center justify-between">
         <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-lg bg-[#232323] flex items-center justify-center shadow-sm">
@@ -147,6 +127,7 @@ export function InventoryForm({ productsList = [] }: Props) {
         
         <div className="flex items-center gap-3">
             <Button 
+                type="button" // Importante: type button para no enviar form
                 onClick={() => router.push('/inventory/import')}
                 className="h-10 w-[140px] gap-2 bg-[#de2d2d] text-white hover:bg-[#de2d2d]/90 shadow-sm px-3 font-medium border-none text-xs"
             >
@@ -161,16 +142,10 @@ export function InventoryForm({ productsList = [] }: Props) {
             <Tabs defaultValue="create" value={activeTab} onValueChange={setActiveTab} className="w-full">
                 
                 <TabsList className="h-11 mb-5 bg-zinc-100 p-1 w-full sm:w-auto inline-flex justify-start rounded-lg">
-                    <TabsTrigger 
-                        value="create" 
-                        className="text-xs h-9 px-5 font-bold rounded-md transition-all data-[state=active]:bg-[#232323] data-[state=active]:text-white data-[state=active]:shadow-sm"
-                    >
+                    <TabsTrigger value="create" className="text-xs h-9 px-5 font-bold rounded-md data-[state=active]:bg-[#232323] data-[state=active]:text-white">
                         Crear Nuevo
                     </TabsTrigger>
-                    <TabsTrigger 
-                        value="link" 
-                        className="text-xs h-9 px-5 font-bold rounded-md transition-all data-[state=active]:bg-[#232323] data-[state=active]:text-white data-[state=active]:shadow-sm"
-                    >
+                    <TabsTrigger value="link" className="text-xs h-9 px-5 font-bold rounded-md data-[state=active]:bg-[#232323] data-[state=active]:text-white">
                         Sumar a Existente
                     </TabsTrigger>
                 </TabsList>
@@ -178,36 +153,32 @@ export function InventoryForm({ productsList = [] }: Props) {
                 {/* --- MODO CREAR --- */}
                 <TabsContent value="create" className="mt-0 animate-in fade-in-50">
                     <div className="grid grid-cols-12 gap-4 items-end">
+                        {/* Fila 1 */}
                         <div className="col-span-12 md:col-span-3 space-y-1.5">
                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Código / QR</Label>
                             <div className="flex gap-1">
                                 <Input 
                                     name="code" 
-                                    placeholder="Ej: PROD-8FL1Y9" 
+                                    placeholder="PROD-..." 
                                     required={activeTab === 'create'} 
                                     onChange={handleCodeInput} 
-                                    className="h-10 text-sm bg-zinc-50 border-zinc-200 focus:bg-white transition-all uppercase font-mono" 
+                                    className="h-10 text-sm uppercase font-mono bg-zinc-50" 
                                 />
-                                <Button type="button" variant="outline" size="icon" onClick={generateCode} className="h-10 w-10 shrink-0 text-zinc-400 hover:text-[#232323] border-zinc-200">
-                                    <Wand2 size={16} />
+                                <Button type="button" variant="outline" size="icon" onClick={generateCode} className="h-10 w-10 shrink-0">
+                                    <Wand2 size={16} className="text-zinc-400" />
                                 </Button>
                             </div>
                         </div>
 
                         <div className="col-span-12 md:col-span-6 space-y-1.5">
                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Descripción</Label>
-                            <Input 
-                                name="description" 
-                                placeholder="Ej: Taladro Percutor Inalámbrico..." 
-                                required={activeTab === 'create'} 
-                                className="h-10 text-sm bg-zinc-50 border-zinc-200 focus:bg-white transition-all" 
-                            />
+                            <Input name="description" placeholder="Nombre del producto..." required={activeTab === 'create'} className="h-10 text-sm bg-zinc-50" />
                         </div>
 
                         <div className="col-span-12 md:col-span-3 space-y-1.5">
                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Categoría</Label>
                             <Select value={category} onValueChange={setCategory}>
-                                <SelectTrigger className="h-10 text-sm bg-zinc-50 border-zinc-200"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="h-10 text-sm bg-zinc-50"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="Herramienta">Herramienta</SelectItem>
                                     <SelectItem value="Consumible">Consumible</SelectItem>
@@ -216,45 +187,36 @@ export function InventoryForm({ productsList = [] }: Props) {
                             </Select>
                         </div>
 
-                        <div className="col-span-12 md:col-span-3 space-y-1.5">
-                            <Label className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">Ref. Prov (Obligatorio)</Label>
-                            <Input 
-                                name="shortCode" 
-                                placeholder="Ej: FAC-123" 
-                                className="h-10 text-sm bg-blue-50/50 border-blue-100 focus:border-blue-300 font-mono text-blue-800" 
-                            />
+                        {/* Fila 2: Proveedor y Cantidades */}
+                        <div className="col-span-6 md:col-span-3 space-y-1.5">
+                            <Label className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">Ref. Prov (Clave)</Label>
+                            <Input name="shortCode" placeholder="Ej: DCD996" className="h-10 text-sm bg-blue-50/50 border-blue-100 text-blue-800 font-mono" />
+                        </div>
+
+                        {/* NUEVO CAMPO: PROVEEDOR */}
+                        <div className="col-span-6 md:col-span-3 space-y-1.5">
+                            <Label className="text-[10px] font-bold text-blue-600 uppercase tracking-wide flex items-center gap-1">
+                                <Truck size={12}/> Proveedor
+                            </Label>
+                            <Input name="providerName" placeholder="Ej: Dewalt / Bosch" className="h-10 text-sm bg-blue-50/50 border-blue-100 text-blue-800" />
                         </div>
 
                         <div className="col-span-6 md:col-span-2 space-y-1.5">
                             <Label className="text-[10px] font-bold text-red-600 uppercase tracking-wide flex items-center gap-1">
                                 Min <AlertTriangle size={12}/>
                             </Label>
-                            <Input 
-                                name="minStock" 
-                                type="text" 
-                                inputMode="numeric"
-                                defaultValue="5" 
-                                onChange={handleNumberInput} 
-                                className="h-10 text-sm text-center bg-red-50 border-red-200 text-red-700 font-bold focus:ring-red-200" 
-                            />
+                            <Input name="minStock" inputMode="numeric" defaultValue="5" onChange={handleNumberInput} className="h-10 text-sm text-center bg-red-50 border-red-200 text-red-700 font-bold" />
                         </div>
 
                          <div className="col-span-6 md:col-span-2 space-y-1.5">
                             <Label className="text-[10px] font-bold text-[#232323] uppercase tracking-wide">Cant.</Label>
-                            <Input 
-                                name="quantity" 
-                                type="text" 
-                                inputMode="numeric"
-                                defaultValue="1" 
-                                onChange={handleNumberInput} 
-                                required 
-                                className="h-10 text-base font-bold text-center border-zinc-300 focus:border-[#232323]" 
-                            />
+                            <Input name="quantity" inputMode="numeric" defaultValue="1" onChange={handleNumberInput} required className="h-10 text-base font-bold text-center border-zinc-300 focus:border-[#232323]" />
                         </div>
-
-                        <div className="col-span-12 md:col-span-5">
-                            <Button type="submit" disabled={loading} className="w-full h-10 bg-[#232323] hover:bg-[#232323]/90 text-white text-xs font-bold uppercase tracking-widest shadow-md transition-all hover:scale-[1.01]">
-                                {loading ? <Loader2 className="animate-spin h-4 w-4" /> : "Registrar Producto"}
+                        
+                        {/* Botón Full Width en Mobile, o ajustado */}
+                        <div className="col-span-12 md:col-span-2">
+                             <Button type="submit" disabled={loading} className="w-full h-10 bg-[#232323] hover:bg-[#232323]/90 text-white text-xs font-bold uppercase">
+                                {loading ? <Loader2 className="animate-spin" /> : "Guardar"}
                             </Button>
                         </div>
                     </div>
@@ -263,39 +225,32 @@ export function InventoryForm({ productsList = [] }: Props) {
                 {/* --- MODO VINCULAR --- */}
                 <TabsContent value="link" className="mt-0 animate-in fade-in-50">
                     <div className="grid grid-cols-12 gap-4 items-end">
-                        <div className="col-span-12 md:col-span-6 space-y-1.5">
+                        <div className="col-span-12 md:col-span-4 space-y-1.5">
                             <Label className="text-[10px] font-bold text-blue-600 uppercase tracking-wide flex items-center gap-1">
-                                <LinkIcon size={14}/> Buscar Producto Existente
+                                <LinkIcon size={14}/> Buscar Producto
                             </Label>
                             <SearchableProductSelect products={productsList} value={selectedProductId} onChange={setSelectedProductId} />
                         </div>
 
-                        {/* CAMBIO: ETIQUETA OBLIGATORIA */}
-                        <div className="col-span-12 md:col-span-3 space-y-1.5">
-                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Ref. Prov (Obligatorio)</Label>
-                             <Input 
-                                name="shortCode" 
-                                placeholder="Clave del proveedor..." 
-                                className="h-10 text-sm bg-zinc-50 border-zinc-200 font-mono" 
-                             />
+                        <div className="col-span-6 md:col-span-3 space-y-1.5">
+                             <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Ref. Prov (Clave)</Label>
+                             <Input name="shortCode" placeholder="Clave..." className="h-10 text-sm bg-zinc-50 font-mono" />
                         </div>
 
-                        <div className="col-span-4 md:col-span-1 space-y-1.5">
+                        {/* NUEVO CAMPO: PROVEEDOR EN VINCULAR */}
+                        <div className="col-span-6 md:col-span-3 space-y-1.5">
+                            <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">Proveedor</Label>
+                            <Input name="providerName" placeholder="Nombre..." className="h-10 text-sm bg-zinc-50" />
+                        </div>
+
+                        <div className="col-span-6 md:col-span-1 space-y-1.5">
                             <Label className="text-[10px] font-bold text-[#232323] uppercase tracking-wide">Cant.</Label>
-                            <Input 
-                                name="quantity" 
-                                type="text" 
-                                inputMode="numeric"
-                                defaultValue="1" 
-                                onChange={handleNumberInput} 
-                                required 
-                                className="h-10 text-base font-bold text-center border-zinc-300 focus:border-[#232323]" 
-                            />
+                            <Input name="quantity" inputMode="numeric" defaultValue="1" onChange={handleNumberInput} required className="h-10 text-base font-bold text-center border-zinc-300" />
                         </div>
 
-                        <div className="col-span-8 md:col-span-2">
-                             <Button type="submit" disabled={loading} className="w-full h-10 bg-[#232323] hover:bg-[#232323]/90 text-white text-xs font-bold uppercase tracking-widest shadow-md transition-all hover:scale-[1.01]">
-                                {loading ? "..." : "Sumar Stock"}
+                        <div className="col-span-6 md:col-span-1">
+                             <Button type="submit" disabled={loading} className="w-full h-10 bg-[#232323] text-white text-xs font-bold uppercase">
+                                {loading ? "..." : "Sumar"}
                             </Button>
                         </div>
                     </div>
