@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { logHistory } from "@/lib/logger" // <--- IMPORTANTE
 
 // 1. Obtener préstamos activos (Solo herramientas pendientes)
 export async function getActiveLoans() {
@@ -35,6 +36,8 @@ export async function createLoan(formData: FormData) {
       
       // A. Buscamos el producto para ver su STOCK y su CATEGORÍA
       const product = await tx.product.findUnique({ where: { id: productId } })
+      // También buscamos al empleado para el log
+      const employee = await tx.employee.findUnique({ where: { id: employeeId } })
       
       if (!product || product.stock < quantity) {
         throw new Error(`Stock insuficiente. Solo quedan ${product?.stock || 0}`)
@@ -60,6 +63,15 @@ export async function createLoan(formData: FormData) {
           backupProduct: product.description,
         }
       })
+
+      // D. REGISTRAR EN HISTORIAL
+      // Esto es lo que permite que aparezca el código QR en la tabla
+      await logHistory({
+          action: newStatus === 'consumido' ? "SALIDA / CONSUMO" : "SALIDA / PRÉSTAMO",
+          module: "PRESTAMOS",
+          description: `Salida de ${quantity}u: ${product.description} -> ${employee?.name || "Empleado"}`,
+          details: `Código: ${product.code} | Stock Restante: ${product.stock - quantity}`
+      })
     })
 
     revalidatePath("/loans")
@@ -76,7 +88,11 @@ export async function createLoan(formData: FormData) {
 export async function returnLoan(loanId: number) {
   try {
     await prisma.$transaction(async (tx) => {
-      const loan = await tx.loan.findUnique({ where: { id: loanId } })
+      const loan = await tx.loan.findUnique({ 
+          where: { id: loanId },
+          // Incluimos producto y empleado para poder llenar el historial con datos útiles
+          include: { product: true, employee: true } 
+      })
       
       // Validación extra de seguridad
       if (!loan || loan.status !== "prestado") {
@@ -94,6 +110,14 @@ export async function returnLoan(loanId: number) {
       await tx.product.update({
         where: { id: loan.productId },
         data: { stock: { increment: loan.quantity } }
+      })
+
+      // --- REGISTRAR HISTORIAL DE DEVOLUCIÓN ---
+      await logHistory({
+          action: "DEVOLUCIÓN",
+          module: "PRESTAMOS",
+          description: `Reingreso de: ${loan.product.description} (Devuelto por ${loan.employee?.name || "Empleado"})`,
+          details: `Código: ${loan.product.code} | Cantidad: ${loan.quantity} | Estado: Buen estado`
       })
     })
 

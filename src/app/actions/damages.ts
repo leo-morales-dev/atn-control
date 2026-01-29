@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { logHistory } from "@/lib/logger" // <--- IMPORTANTE: Importamos el logger
 
 export async function createDamageReport(formData: FormData) {
   const productId = parseInt(formData.get("productId") as string)
@@ -38,6 +39,15 @@ export async function createDamageReport(formData: FormData) {
       await tx.product.update({
         where: { id: productId },
         data: { stock: { decrement: quantity } },
+      })
+
+      // 4. REGISTRAR EN HISTORIAL (ESTO ES LO QUE FALTABA)
+      // Guardamos explícitamente "Código: ..." para que la tabla de historial lo detecte.
+      await logHistory({
+          action: `BAJA - ${reason.toUpperCase()}`,
+          module: "BAJAS",
+          description: `Se dieron de baja ${quantity} unidades de ${product.description}`,
+          details: `Código: ${product.code} | Ref. Prov Afectada: ${supplierCode || "N/A"} | Motivo: ${notes}`
       })
     })
 
