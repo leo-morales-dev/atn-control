@@ -13,7 +13,7 @@ export interface XmlItem {
   providerName?: string 
 }
 
-// 1. LEER XML (Sin cambios)
+// 1. LEER XML Y DETECTAR DUPLICADOS POR CLAVE DE PROVEEDOR
 export async function parseFacturaXML(formData: FormData) {
   const file = formData.get('xml') as File
   if (!file) return { success: false, error: "No se subió archivo" }
@@ -26,35 +26,75 @@ export async function parseFacturaXML(formData: FormData) {
     const emisorData = comprobante['cfdi:Emisor']?.[0]?.['$']
     const providerName = emisorData?.Nombre || "Proveedor Desconocido"
 
+    // Extracción de conceptos
     const conceptos = comprobante['cfdi:Conceptos'][0]['cfdi:Concepto']
     const items: XmlItem[] = []
+    const codesInXml: string[] = []
 
     for (const c of conceptos) {
       const attrs = c['$'] 
+      const code = attrs.NoIdentificacion || attrs.ClaveProdServ || 'S/N'
+      
       items.push({
-        noIdentificacion: attrs.NoIdentificacion || attrs.ClaveProdServ || 'S/N',
+        noIdentificacion: code,
         descripcion: attrs.Descripcion,
         cantidad: parseFloat(attrs.Cantidad),
         valorUnitario: parseFloat(attrs.ValorUnitario),
         unidad: attrs.Unidad || attrs.ClaveUnidad,
         providerName: providerName
       })
+      
+      if (code && code !== 'S/N') {
+          codesInXml.push(code)
+      }
     }
 
+    // --- NUEVA LÓGICA DE DUPLICADOS (Por Clave de Proveedor) ---
+    // Verificamos si alguna de las claves del XML ya existe en la base de datos
+    let isDuplicate = false
+    let duplicateDetails = ""
+
+    if (codesInXml.length > 0) {
+        // Buscamos en la tabla de claves de proveedor
+        const existingKey = await prisma.supplierCode.findFirst({
+            where: {
+                code: { in: codesInXml }
+            },
+            include: { product: true } // Traemos el producto para mostrar su nombre
+        })
+
+        if (existingKey) {
+            isDuplicate = true
+            duplicateDetails = `Clave encontrada: ${existingKey.code} (Producto: ${existingKey.product.description})`
+        }
+    }
+
+    // Buscamos sugerencias para vincular (Match)
     const itemsWithSuggestions = await Promise.all(items.map(async (item) => {
       const match = await prisma.product.findFirst({
         where: {
             OR: [
                 { code: item.noIdentificacion },
-                { supplierCodes: { some: { code: item.noIdentificacion } } } 
+                { supplierCodes: { some: { code: item.noIdentificacion } } },
+                { shortCode: item.noIdentificacion } // También buscamos en shortCode directo
             ]
         }
       })
-      
       return { ...item, suggestedProduct: match }
     }))
 
-    return { success: true, data: itemsWithSuggestions }
+    return { 
+        success: true, 
+        data: {
+            items: itemsWithSuggestions,
+            invoiceInfo: {
+                uuid: "N/A", // Ya no usamos el UUID para bloquear
+                isDuplicate: isDuplicate,
+                provider: providerName,
+                details: duplicateDetails // Enviamos detalle de qué clave causó la alerta
+            }
+        } 
+    }
 
   } catch (error) {
     console.error(error)
@@ -62,25 +102,29 @@ export async function parseFacturaXML(formData: FormData) {
   }
 }
 
-// 2. GUARDAR DATOS (Con Historial Detallado por Ítem)
-export async function processXmlImport(items: any[]) {
+// 2. GUARDAR DATOS (Sin registro de UUID en Historial)
+export async function processXmlImport(payload: { items: any[], invoiceUuid?: string }) {
+  const { items } = payload; 
+
   try {
     await prisma.$transaction(async (tx) => {
+      
+      // NOTA: Eliminamos el bloque que guardaba 'XML_IMPORT_RECORD' en SystemLog
+      // para no bloquear futuras importaciones basadas en UUID.
+
       for (const item of items) {
         
-        // Esta lógica se mantiene para los SupplierCodes y shortCode
         const newCode = item.shortCode || item.code
         const provider = item.providerName || "Proveedor General"
         
         let logDescription = ""
-        // CORRECCIÓN: Inicializamos una variable explícita para el código del sistema
         let systemCode = item.code 
 
         if (item.action === 'create') {
           // --- CREAR ---
           await tx.product.create({
             data: {
-              code: item.code, // Aquí usa el código de sistema correctamente
+              code: item.code,
               description: item.description,
               category: item.category,
               stock: item.quantity,
@@ -94,15 +138,12 @@ export async function processXmlImport(items: any[]) {
               }
             }
           })
-          
           logDescription = `Alta Nueva (XML): ${item.description}`
-          // En creación, systemCode ya es item.code, así que está bien.
 
         } else if (item.action === 'link' && item.linkedProductId) {
           // --- VINCULAR ---
           const prodId = item.linkedProductId
           
-          // ... (lógica de supplierCode igual) ...
           const existingKey = await tx.supplierCode.findFirst({
               where: { productId: prodId, code: newCode }
           })
@@ -115,7 +156,6 @@ export async function processXmlImport(items: any[]) {
 
           const currentProd = await tx.product.findUnique({ where: { id: prodId } })
           if (currentProd) {
-             // CORRECCIÓN: Actualizamos systemCode con el código real de la base de datos
              systemCode = currentProd.code
 
              let updatedShortCode = currentProd.shortCode || ""
@@ -135,14 +175,12 @@ export async function processXmlImport(items: any[]) {
           }
         }
 
-        // --- REGISTRO INDIVIDUAL EN HISTORIAL ---
         if (logDescription) {
             await tx.systemLog.create({
                 data: {
                     action: "INGRESO XML",
                     module: "INVENTARIO",
                     description: logDescription,
-                    // CORRECCIÓN: Usamos systemCode en lugar de newCode para la etiqueta Código:
                     details: `Cant: +${item.quantity} | Código: ${systemCode} | Prov: ${provider}`
                 }
             })

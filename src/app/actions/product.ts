@@ -61,7 +61,7 @@ export async function getProducts(query: string = "", filter: string = "all") {
   }
 }
 
-// 3. Borrado Lógico Masivo
+// 3. Borrado Lógico Masivo (CORREGIDO PARA BORRAR RASTRO DE FACTURAS)
 export async function deleteProducts(filter: string = "all") {
   try {
     let where: any = { isArchived: false }
@@ -76,6 +76,7 @@ export async function deleteProducts(filter: string = "all") {
       where.id = { in: idsToDelete }
     }
 
+    // 1. Archivar productos (Lógica original)
     await prisma.product.updateMany({
       where,
       data: {
@@ -83,6 +84,16 @@ export async function deleteProducts(filter: string = "all") {
         stock: 0
       }
     })
+
+    // 2. NUEVO: SI EL FILTRO ES "BORRAR TODO", BORRAMOS LA MEMORIA DE FACTURAS
+    if (filter === 'all') {
+       // Esto elimina el registro que dice "Esta factura ya se importó"
+       await prisma.systemLog.deleteMany({
+           where: { 
+               action: 'XML_IMPORT_RECORD' 
+           }
+       })
+    }
 
     revalidatePath("/inventory")
     revalidatePath("/")
@@ -93,15 +104,14 @@ export async function deleteProducts(filter: string = "all") {
   }
 }
 
-// 4. ACTUALIZAR PRODUCTO (CORREGIDA)
+// 4. ACTUALIZAR PRODUCTO
 export async function updateProduct(formData: FormData) {
-    // CORRECCIÓN: Leemos el ID desde el FormData
     const id = parseInt(formData.get("id") as string)
     const code = formData.get("code") as string
     const description = formData.get("description") as string
     const category = formData.get("category") as string
     const minStockRaw = formData.get("minStock") as string
-    const shortCode = formData.get("shortCode") as string // Ref. Proveedor
+    const shortCode = formData.get("shortCode") as string 
     
     const minStock = minStockRaw ? parseInt(minStockRaw) : 5
   
@@ -118,7 +128,6 @@ export async function updateProduct(formData: FormData) {
             category, 
             minStock,
             shortCode: shortCode || null
-            // NOTA: No actualizamos 'stock' aquí para evitar resetearlo a 0 accidentalmente
         }
       })
       
@@ -126,7 +135,6 @@ export async function updateProduct(formData: FormData) {
       revalidatePath("/") 
       return { success: true }
     } catch (error: any) {
-      // Detección de error de unicidad (P2002 en Prisma)
       if (error.code === 'P2002') {
           return { success: false, error: "Unique constraint violation" }
       }
@@ -184,7 +192,6 @@ export async function createOrUpdateProduct(data: FormData) {
   const mode = data.get("mode") as string 
   const quantity = parseInt(data.get("quantity") as string) || 0
   const providerKey = data.get("shortCode") as string || "" 
-  // NUEVO: Leemos el nombre del proveedor. Si está vacío, ponemos uno por defecto.
   const providerName = (data.get("providerName") as string) || "Ingreso Manual"
 
   try {
@@ -195,7 +202,6 @@ export async function createOrUpdateProduct(data: FormData) {
       
       if (!currentProd) throw new Error("Producto no encontrado")
 
-      // 1. Guardar en SupplierCode si es una clave nueva
       if (providerKey) {
           const existing = await prisma.supplierCode.findFirst({
               where: { productId, code: providerKey }
@@ -206,15 +212,13 @@ export async function createOrUpdateProduct(data: FormData) {
                   data: {
                       productId,
                       code: providerKey,
-                      provider: providerName // <-- AQUÍ GUARDAMOS EL PROVEEDOR
+                      provider: providerName
                   }
               })
           }
       }
 
-      // 2. Actualizar stock y visual
       let updatedShortCode = currentProd.shortCode || ""
-      // Si la clave es nueva y no está en el string visual, la agregamos
       if (providerKey && !updatedShortCode.includes(providerKey)) {
           updatedShortCode = updatedShortCode ? `${updatedShortCode} / ${providerKey}` : providerKey
       }
@@ -227,12 +231,10 @@ export async function createOrUpdateProduct(data: FormData) {
         }
       })
 
-      // --- REGISTRAR HISTORIAL (Log) ---
       await logHistory({
         action: "INGRESO MANUAL (SUMA)",
         module: "INVENTARIO",
         description: `Se sumaron ${quantity} unidades a: ${currentProd.description}`,
-        // Agregamos el proveedor al log también
         details: `Código: ${currentProd.code} | Ref. Prov: ${providerKey || "N/A"} | Prov: ${providerName}`
       })
 
@@ -256,17 +258,15 @@ export async function createOrUpdateProduct(data: FormData) {
           stock: quantity,
           minStock,
           shortCode: providerKey,
-          // Creamos la relación aquí también con el NOMBRE
           supplierCodes: {
               create: providerKey ? [{ 
                   code: providerKey, 
-                  provider: providerName // <-- AQUÍ GUARDAMOS EL PROVEEDOR 
+                  provider: providerName 
               }] : []
           }
         }
       })
 
-      // --- REGISTRAR HISTORIAL (Log) ---
       await logHistory({
         action: "INGRESO MANUAL (NUEVO)",
         module: "INVENTARIO",

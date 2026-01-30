@@ -2,7 +2,7 @@
 
 import prisma from "@/lib/prisma"
 import { cookies } from "next/headers"
-import { redirect } from "next/navigation"
+// import { redirect } from "next/navigation" // No es necesario si rediriges desde el cliente
 
 export async function wipeSystemData(password: string) {
   // 1. VERIFICAR CONTRASEÑA
@@ -15,10 +15,13 @@ export async function wipeSystemData(password: string) {
     // 2. BORRADO EN CASCADA (Orden estricto para evitar errores de llaves foráneas)
     await prisma.$transaction([
       // A. Tablas de movimientos / historial / dependencias
-      prisma.systemLog.deleteMany(),
+      // IMPORTANTE: Esto borra TODO el historial, incluyendo el registro de facturas importadas.
+      prisma.systemLog.deleteMany(), 
       prisma.loan.deleteMany(),
       prisma.damageReport.deleteMany(),
       prisma.supplierCode.deleteMany(),
+      prisma.incident.deleteMany(), // Agregué Incident por si acaso tienes incidentes
+      prisma.damageLog.deleteMany(), // Agregué DamageLog por si acaso
       
       // B. Tablas principales (Catálogos)
       prisma.product.deleteMany(),

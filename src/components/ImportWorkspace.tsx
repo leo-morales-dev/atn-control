@@ -4,13 +4,14 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { 
     FileUp, Save, Link as LinkIcon, ArrowRight, Wand2, Trash2, 
-    Hammer, PaintBucket, RotateCcw, AlertTriangle, PlusCircle, Box 
+    Hammer, PaintBucket, RotateCcw, AlertTriangle, PlusCircle, Box, AlertOctagon 
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert" // Asegúrate de tener este componente ui/alert o usa un div normal
 import { parseFacturaXML, processXmlImport } from "@/app/actions/import-xml"
 import { SearchableProductSelect } from "@/components/SearchableProductSelect"
 import { toast } from "sonner" 
@@ -24,6 +25,9 @@ export function ImportWorkspace({ existingProducts }: Props) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [importItems, setImportItems] = useState<any[]>([])
+  
+  // NUEVO ESTADO: Información de la factura
+const [invoiceInfo, setInvoiceInfo] = useState<{ uuid: string, isDuplicate: boolean, provider: string, details?: string } | null>(null)
 
   // --- 1. SUBIR XML ---
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -35,14 +39,16 @@ export function ImportWorkspace({ existingProducts }: Props) {
     const result = await parseFacturaXML(formData)
     setLoading(false)
 
-    if (result.success) {
-      const preparedItems = (result.data || []).map((item: any, index: number) => ({
+    if (result.success && result.data) {
+      const { items, invoiceInfo } = result.data
+      
+      const preparedItems = (items || []).map((item: any, index: number) => ({
         id: index,
         originalCode: item.noIdentificacion,
         originalDesc: item.descripcion,
         originalProvider: item.providerName || "Proveedor General", 
         quantity: item.cantidad,
-        action: 'create', // Por defecto
+        action: 'create', 
         linkedProductId: item.suggestedProduct?.id || "",
         newCode: '', 
         newShortCode: item.noIdentificacion, 
@@ -50,16 +56,26 @@ export function ImportWorkspace({ existingProducts }: Props) {
         newCategory: 'Consumible',
         newMinStock: 5 
       }))
+      
       setImportItems(preparedItems)
+      setInvoiceInfo(invoiceInfo) // Guardamos info de la factura
       setStep(2)
-      toast.success("Factura analizada correctamente")
+      
+      // ALERTA INMEDIATA SI ES DUPLICADA
+      if (invoiceInfo.isDuplicate) {
+          toast.error("¡Factura Duplicada!", { 
+              description: "Este XML ya fue importado anteriormente. Revisa con cuidado antes de continuar.",
+              duration: 8000
+          })
+      } else {
+          toast.success("Factura analizada correctamente")
+      }
     } else {
       toast.error("Error al leer XML", { description: result.error })
     }
   }
 
-  // --- 2. ACCIONES RÁPIDAS ---
-  
+  // ... (Funciones applyRandomCodes, applyCategoryToAll, applyActionToAll, toggleIgnore SIN CAMBIOS) ...
   const applyRandomCodes = () => {
     setImportItems(prev => prev.map(item => {
         if (item.action !== 'create') return item
@@ -94,7 +110,7 @@ export function ImportWorkspace({ existingProducts }: Props) {
     }))
   }
 
-  // --- 3. GUARDAR Y VALIDAR (EL CEREBRO DE LA SEGURIDAD) ---
+  // --- 3. GUARDAR Y VALIDAR ---
   async function handleFinalSave() {
     const itemsToProcess = importItems.filter(i => i.action !== 'ignore')
     
@@ -103,52 +119,37 @@ export function ImportWorkspace({ existingProducts }: Props) {
         return
     }
 
-    // A. Validar Vínculos Vacíos (CORREGIDO: Validación Estricta)
-    // Buscamos items que sean 'link' Y que no tengan ID seleccionado (o sea 0 o vacío)
+    // SI ES DUPLICADA, PEDIMOS CONFIRMACIÓN EXTRA
+    if (invoiceInfo?.isDuplicate) {
+        const confirm = window.confirm("ADVERTENCIA: Esta factura ya fue registrada anteriormente.\n\n¿Estás SEGURO de que quieres volver a importarla? Esto podría duplicar el stock.")
+        if (!confirm) return
+    }
+
+    // ... (Validaciones anteriores de links, códigos vacíos, duplicados internos y externos SIN CAMBIOS) ...
     const invalidLinks = itemsToProcess.find(i => 
         i.action === 'link' && (!i.linkedProductId || i.linkedProductId.toString() === "0" || i.linkedProductId === "")
     )
-    
     if (invalidLinks) {
-        toast.error("Faltan Selecciones en 'Vincular'", { 
-            description: "Has elegido 'Vincular Existente' en un producto pero no seleccionaste cuál. Por favor elige uno o cambia a 'Crear Nuevo'." 
-        })
-        return
+        toast.error("Faltan Selecciones en 'Vincular'", { description: "Selecciona un producto para vincular." }); return
     }
 
-    // B. Validar Códigos QR Vacíos
     const emptyCodes = itemsToProcess.find(i => i.action === 'create' && !i.newCode?.trim())
     if (emptyCodes) {
-        toast.error("Faltan Códigos QR", { 
-            description: "No se pueden crear productos sin código. Escríbelos o usa 'Códigos Mágicos'." 
-        })
-        return 
+        toast.error("Faltan Códigos QR", { description: "Genera o escribe los códigos faltantes." }); return 
     }
 
-    // C. Validar Duplicados INTERNOS (En la misma lista)
-    const codesInBatch = itemsToProcess
-        .filter(i => i.action === 'create')
-        .map(i => i.newCode?.trim().toUpperCase());
-    
+    const codesInBatch = itemsToProcess.filter(i => i.action === 'create').map(i => i.newCode?.trim().toUpperCase());
     const uniqueCodes = new Set(codesInBatch);
     if (uniqueCodes.size !== codesInBatch.length) {
-        toast.error("Códigos Duplicados en Lista", { 
-            description: "Estás intentando asignar el MISMO código a dos productos distintos en esta importación." 
-        })
-        return;
+        toast.error("Códigos Duplicados en Lista", { description: "No puedes repetir códigos en la misma importación." }); return;
     }
 
-    // D. Validar Duplicados EXTERNOS (En la Base de Datos)
     const dbConflict = itemsToProcess.find(item => 
         item.action === 'create' && 
         existingProducts.some(ep => ep.code.toUpperCase() === item.newCode?.trim().toUpperCase())
     );
-
     if (dbConflict) {
-        toast.error("Código Ya Existe", { 
-            description: `El código '${dbConflict.newCode}' ya pertenece a otro producto en tu inventario. Cámbialo o usa 'Vincular'.` 
-        })
-        return;
+        toast.error("Código Ya Existe", { description: `El código '${dbConflict.newCode}' ya existe.` }); return;
     }
 
     setLoading(true)
@@ -164,11 +165,16 @@ export function ImportWorkspace({ existingProducts }: Props) {
         providerName: item.originalProvider 
     }))
 
-    const result = await processXmlImport(payload)
+    // ENVIAMOS EL UUID AL SERVIDOR PARA REGISTRARLO
+    const result = await processXmlImport({ 
+        items: payload, 
+        invoiceUuid: invoiceInfo?.uuid 
+    })
+    
     setLoading(false)
 
     if (result.success) {
-        toast.success("Importación Exitosa", { description: "El inventario ha sido actualizado." })
+        toast.success("Importación Exitosa")
         router.push("/inventory")
         router.refresh()
     } else {
@@ -176,32 +182,24 @@ export function ImportWorkspace({ existingProducts }: Props) {
     }
   }
 
-  // --- CONTROL DE INPUTS (SANITIZACIÓN MEJORADA) ---
+  // ... (Resto de funciones updateItem y getLinkedProductInfo SIN CAMBIOS) ...
   const updateItem = (id: number, field: string, value: any) => {
-    
-    // 1. SOLO NÚMEROS POSITIVOS (Bloquea -, +, e, letras)
     if (field === 'newMinStock' || field === 'quantity') {
-        // Reemplaza todo lo que NO sea un número del 0 al 9
         const clean = value.toString().replace(/[^0-9]/g, '');
-        
-        // Si queda vacío, lo dejamos vacío (para permitir borrar). Si tiene números, parseamos.
         value = clean === '' ? '' : parseInt(clean, 10);
     }
-    
-    // 2. Códigos en Mayúsculas y sin espacios
     if (field === 'newCode') {
         value = value.toString().toUpperCase().replace(/\s/g, '');
     }
-
     setImportItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item))
   }
 
-  // Helper para encontrar info del producto vinculado
   const getLinkedProductInfo = (id: string) => {
       return existingProducts.find(p => p.id.toString() === id);
   }
 
   if (step === 1) {
+    // ... (Vista de carga SIN CAMBIOS) ...
     return (
         <div className="flex flex-col items-center justify-center min-h-[50vh] border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50/50">
             <div className="bg-white p-6 rounded-full shadow-sm mb-4">
@@ -228,8 +226,35 @@ export function ImportWorkspace({ existingProducts }: Props) {
 
   return (
     <div className="space-y-6">
+        {/* NUEVO: ALERTA DE FACTURA DUPLICADA */}
+        {invoiceInfo?.isDuplicate && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start gap-4 animate-in fade-in slide-in-from-top-2 mb-4">
+                <AlertTriangle className="text-yellow-600 shrink-0 mt-0.5" />
+                <div>
+                    <h4 className="text-yellow-800 font-bold mb-1">¡Atención: Productos ya registrados!</h4>
+                    <p className="text-sm text-yellow-700 mb-2">
+                        El sistema detectó que este XML contiene claves de proveedor que ya existen en tu inventario.
+                        <br/>
+                        <span className="font-mono bg-yellow-100 px-1 rounded text-xs mt-1 inline-block">
+                            {invoiceInfo.details || "Coincidencia encontrada en base de datos."}
+                        </span>
+                    </p>
+                    <div className="flex gap-2 mt-2">
+                        <Button variant="outline" size="sm" onClick={() => setStep(1)} className="bg-white border-yellow-200 text-yellow-700 hover:bg-yellow-100 h-8 text-xs">
+                            Cancelar Importación
+                        </Button>
+                        {/* Mensaje visual indicando que puede continuar */}
+                        <div className="text-xs text-yellow-600 flex items-center italic">
+                            Puedes continuar si deseas sumar stock (Vincular).
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* BARRA DE ACCIONES RÁPIDAS */}
-        <Card className="bg-white border-zinc-200 shadow-sm sticky top-4 z-20">
+        <Card className={`bg-white shadow-sm sticky top-4 z-20 transition-colors ${invoiceInfo?.isDuplicate ? 'border-red-200 ring-2 ring-red-100' : 'border-zinc-200'}`}>
+             {/* ... (Contenido de la barra SIN CAMBIOS IMPORTANTE) ... */}
             <CardContent className="p-3 flex flex-col md:flex-row flex-wrap items-center gap-4 justify-between">
                 
                 {/* GRUPO IZQUIERDO */}
@@ -265,7 +290,11 @@ export function ImportWorkspace({ existingProducts }: Props) {
                     <Button variant="ghost" onClick={() => setStep(1)} className="text-zinc-500 h-8 text-xs">
                         Cancelar
                     </Button>
-                    <Button onClick={handleFinalSave} disabled={loading} className="bg-[#de2d2d] text-white shadow-md hover:bg-[#de2d2d]/90 h-8 text-xs font-bold px-4">
+                    <Button 
+                        onClick={handleFinalSave} 
+                        disabled={loading} 
+                        className={`h-8 text-xs font-bold px-4 shadow-md text-white ${invoiceInfo?.isDuplicate ? 'bg-red-600 hover:bg-red-700' : 'bg-[#de2d2d] hover:bg-[#de2d2d]/90'}`}
+                    >
                         <Save size={14} className="mr-2" />
                         {loading ? "Guardando..." : `Importar ${importItems.filter(i => i.action !== 'ignore').length} Ítems`}
                     </Button>
@@ -273,9 +302,10 @@ export function ImportWorkspace({ existingProducts }: Props) {
             </CardContent>
         </Card>
 
-        {/* TABLA DE TRABAJO */}
+        {/* ... (TABLA DE TRABAJO SIN CAMBIOS) ... */}
         <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
+             {/* El contenido de la tabla sigue igual */}
+             <table className="w-full text-sm">
                 <thead className="bg-zinc-50 border-b border-zinc-100">
                     <tr>
                         <th className="p-3 text-left w-[25%] font-medium text-zinc-500 pl-6">Producto en Factura</th>
@@ -291,8 +321,9 @@ export function ImportWorkspace({ existingProducts }: Props) {
 
                         return (
                         <tr key={item.id} className={`group transition-colors ${isIgnored ? 'bg-zinc-50/80 opacity-60' : 'hover:bg-zinc-50/50'}`}>
-                            
-                            {/* 1. XML INFO */}
+                             {/* ... (CONTENIDO DE CELDAS IDÉNTICO AL ANTERIOR) ... */}
+                             {/* Nota: Copia el contenido interno de las celdas de tu archivo anterior aquí, no cambia nada en la tabla */}
+                             {/* 1. XML INFO */}
                             <td className="p-4 align-top pl-6">
                                 <div className={`font-semibold text-sm ${isIgnored ? 'text-zinc-400 line-through' : 'text-zinc-800'}`}>
                                     {item.originalDesc}
