@@ -17,10 +17,9 @@ export default async function HistoryPage({ searchParams }: Props) {
   const currentPage = Number(params.page) || 1
   const itemsPerPage = 10 
 
-  // CORRECCIÓN: Inicializamos 'where' con una lista 'AND' para sumar condiciones sin sobrescribirlas
   const where: any = { AND: [] }
 
-  // 1. CONDICIÓN DE BÚSQUEDA (Search)
+  // 1. CONDICIÓN DE BÚSQUEDA
   if (params.q) {
     where.AND.push({
       OR: [
@@ -31,7 +30,7 @@ export default async function HistoryPage({ searchParams }: Props) {
     })
   }
 
-  // 2. CONDICIÓN DE CATEGORÍA (Filtros)
+  // 2. CONDICIÓN DE CATEGORÍA
   if (params.cat && params.cat !== 'ALL') {
     switch (params.cat) {
         case 'PRESTAMOS': 
@@ -41,7 +40,6 @@ export default async function HistoryPage({ searchParams }: Props) {
             where.module = 'INVENTARIO'; 
             break;
         case 'BAJAS': 
-            // CORRECCIÓN: Agregamos esta condición al array AND en lugar de reemplazar 'where.OR'
             where.AND.push({
                 OR: [
                     { action: { contains: 'BAJA' } }, 
@@ -66,7 +64,6 @@ export default async function HistoryPage({ searchParams }: Props) {
     if (params.to) where.timestamp.lte = new Date(params.to + "T23:59:59")
   }
 
-  // Limpieza: Si el array AND está vacío, lo quitamos para no ensuciar la consulta
   if (where.AND.length === 0) {
       delete where.AND;
   }
@@ -81,29 +78,33 @@ export default async function HistoryPage({ searchParams }: Props) {
     take: itemsPerPage
   })
 
-  // --- EXTRACTOR DE CÓDIGO (Sin cambios, se mantiene tu lógica) ---
+  // --- EXTRACTOR DE CÓDIGO (CORREGIDO) ---
   const extractCode = (log: any) => {
     const text = `${log.details || ''} ${log.description || ''}`;
     
-    const labelMatch = text.match(/Código:\s*([^|]+)/i);
-    
-    if (labelMatch && labelMatch[1]) {
-        return labelMatch[1].trim().toUpperCase();
-    }
-
-    const systemPattern = /\b(PROD|HER|CON|EMP|LOAN)-[A-Z0-9]+\b/i;
+    // 1. PRIORIDAD: Patrones de sistema exactos (NOM-..., PROD-...)
+    // Esto captura "NOM-2026-4651" directamente ignorando el resto del texto.
+    const systemPattern = /\b(PROD|HER|CON|EMP|LOAN|NOM)-[A-Z0-9-]+\b/i;
     const match = text.match(systemPattern);
 
     if (match) {
         const foundCode = match[0].toUpperCase();
+        // Filtro de seguridad para no capturar claves de referencia
         const index = text.toUpperCase().indexOf(foundCode);
         const prefixContext = text.substring(Math.max(0, index - 15), index).toUpperCase();
         
-        if (prefixContext.includes("REF") || prefixContext.includes("PROV")) {
-            return null; 
+        if (!prefixContext.includes("REF") && !prefixContext.includes("PROV")) {
+            return foundCode; 
         }
+    }
 
-        return foundCode;
+    // 2. FALLBACK: Búsqueda por etiquetas (ID: X)
+    // CAMBIO IMPORTANTE: Ahora usamos [^\s|]+ para que se detenga al encontrar un espacio o un pipe.
+    // Antes usábamos [^|]+ y por eso se comía todo el texto si no había pipes.
+    const labelMatch = text.match(/(?:Código|ID|ID Anterior):\s*([^\s|]+)/i);
+    
+    if (labelMatch && labelMatch[1]) {
+        return labelMatch[1].trim().toUpperCase();
     }
 
     return null;
@@ -111,10 +112,10 @@ export default async function HistoryPage({ searchParams }: Props) {
 
   const getBadgeColor = (action: string) => {
       const act = action.toUpperCase()
-      if (act.includes("XML") || act.includes("EXCEL") || act.includes("INGRESO")) return "bg-green-100 text-green-700 border-green-200"
+      if (act.includes("XML") || act.includes("EXCEL") || act.includes("INGRESO") || act.includes("ALTA")) return "bg-green-100 text-green-700 border-green-200"
       if (act.includes("PRESTAMO")) return "bg-blue-100 text-blue-700 border-blue-200"
       if (act.includes("DEVOLUCION")) return "bg-indigo-100 text-indigo-700 border-indigo-200"
-      if (act.includes("BAJA") || act.includes("DAÑO")) return "bg-red-100 text-red-700 border-red-200"
+      if (act.includes("BAJA") || act.includes("DAÑO") || act.includes("ELIMINADO")) return "bg-red-100 text-red-700 border-red-200"
       if (act.includes("EMPLEADO")) return "bg-purple-100 text-purple-700 border-purple-200"
       return "bg-zinc-100 text-zinc-600 border-zinc-200"
   }

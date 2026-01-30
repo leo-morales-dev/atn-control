@@ -8,7 +8,7 @@ import {
   LayoutDashboard, 
   Package, 
   Users, 
-  ArrowRightLeft, 
+  ArrowRightLeft, // Icono de préstamos
   History, 
   AlertTriangle,
   LogOut,
@@ -20,11 +20,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { SystemResetDialog } from "@/components/SystemResetDialog" // Importamos el diálogo de reinicio
+import { SystemResetDialog } from "@/components/SystemResetDialog"
 
 const menuItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  // { name: "Préstamos", href: "/loans", icon: ArrowRightLeft }, // Descomenta si usas esta página
+  // CAMBIO 1: Descomentamos la línea de Préstamos
+  { name: "Préstamos", href: "/loans", icon: ArrowRightLeft }, 
   { name: "Inventario", href: "/inventory", icon: Package },
   { name: "Reportes", href: "/damages", icon: AlertTriangle },
   { name: "Empleados", href: "/employees", icon: Users },
@@ -35,31 +36,39 @@ export function Sidebar() {
   const pathname = usePathname()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
+  // Reseteamos el estado de logout si cambiamos de página
   useEffect(() => {
     setIsLoggingOut(false)
   }, [pathname])
 
-  if (pathname === "/login" || pathname.startsWith("/print")) {
+  // CAMBIO 2: Lógica de ocultamiento blindada
+  // Usamos startsWith para asegurar que oculte en "/login", "/login/", etc.
+  // También verificamos si pathname es null (puede pasar durante la carga inicial)
+  if (!pathname || pathname.startsWith("/login") || pathname.startsWith("/print")) {
     return null
   }
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
+    // Pequeño delay visual para que el usuario vea que algo pasa
     setTimeout(async () => {
         await logout()
     }, 100)
   }
 
+  // Pantalla de carga mientras cierra sesión (Opcional, pero se ve bien)
   if (isLoggingOut) {
     return (
-        <div className="fixed inset-0 z-[9999] bg-white flex items-center justify-center">
-            <div className="text-zinc-400 text-sm animate-pulse">Cerrando sesión...</div>
+        <div className="fixed inset-0 z-[9999] bg-white/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2">
+                <div className="h-5 w-5 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin"></div>
+                <div className="text-zinc-600 text-xs font-bold animate-pulse">Cerrando sesión...</div>
+            </div>
         </div>
     )
   }
 
   return (
-    // DISEÑO ORIGINAL: Fondo #ebebeb
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-[#ebebeb] text-[#232323] flex flex-col shadow-inner border-r border-white/50">
       
       {/* SECCIÓN DEL LOGO */}
@@ -99,7 +108,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* SECCIÓN DE USUARIO CON POPOVER (MODIFICADA) */}
+      {/* SECCIÓN DE USUARIO */}
       <div className="p-6">
         <Popover>
             <PopoverTrigger asChild>
@@ -124,7 +133,6 @@ export function Sidebar() {
                         <p className="text-xs font-bold text-[#232323]">Opciones de Cuenta</p>
                     </div>
                     
-                    {/* Botón Cerrar Sesión */}
                     <button 
                         onClick={handleLogout}
                         disabled={isLoggingOut}
@@ -135,7 +143,6 @@ export function Sidebar() {
 
                     <div className="h-px bg-zinc-100 my-1"></div>
 
-                    {/* Botón Peligroso: Reiniciar Sistema */}
                     <div className="pt-1">
                         <SystemResetDialog />
                     </div>
